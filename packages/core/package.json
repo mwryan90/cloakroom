@@ -1,0 +1,43 @@
+{
+  "name": "cloakroom-core",
+  "version": "0.3.1",
+  "description": "Server-agnostic masking middleware core: mapping store, tokenizers, sweep, proxy pipeline",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "yaml": "^2.4.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OWNER/cloakroom.git"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "masking",
+    "pseudonymization",
+    "privacy",
+    "powerbi",
+    "claude",
+    "ai-agent",
+    "data-protection"
+  ],
+  "files": [
+    "dist",
+    "!dist/test"
+  ]
+}

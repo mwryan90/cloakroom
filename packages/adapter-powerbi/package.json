@@ -1,0 +1,41 @@
+{
+  "name": "cloakroom-adapter-powerbi",
+  "version": "0.3.1",
+  "description": "Power BI / semantic model adapter for cloakroom (powerbi-modeling-mcp)",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "cloakroom-core": "0.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OWNER/cloakroom.git"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "masking",
+    "pseudonymization",
+    "privacy",
+    "powerbi",
+    "claude",
+    "ai-agent",
+    "data-protection"
+  ],
+  "files": [
+    "dist",
+    "!dist/test"
+  ]
+}

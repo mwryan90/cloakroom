@@ -1,0 +1,22 @@
+{
+  "name": "cloakroom-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "tsc -b packages/cli",
+    "test": "npm run build && node --test --test-force-exit \"packages/core/dist/test/*.test.js\" \"packages/adapter-powerbi/dist/test/*.test.js\" \"packages/ui/dist/test/*.test.js\" \"packages/cli/dist/test/*.test.js\"",
+    "clean": "rm -rf packages/*/dist packages/*/tsconfig.tsbuildinfo",
+    "release": "npm test && npm publish -w cloakroom-core --access public && npm publish -w cloakroom-adapter-powerbi --access public && npm publish -w cloakroom-ui --access public && npm publish -w cloakroom --access public"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "version": "0.3.1"
+}
