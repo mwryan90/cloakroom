@@ -8,6 +8,14 @@ Ships with an adapter for [powerbi-modeling-mcp](https://github.com/microsoft/po
 
 ## Quickstart (Claude Desktop)
 
+### Prerequisites
+
+- **Node.js 20 or newer** — check with `node --version`. If you don't have it, install the LTS from [nodejs.org](https://nodejs.org/) (Windows: `winget install OpenJS.NodeJS.LTS` also works). The installer includes `npm` and `npx` and adds them to your PATH by default — keep that option selected, and open a **new** terminal afterwards so the PATH change takes effect. If `npx --version` isn't recognized in a fresh terminal, re-run the installer and make sure "Add to PATH" is ticked.
+- **Claude Desktop with your Power BI MCP server already configured** (e.g. [powerbi-modeling-mcp](https://github.com/microsoft/powerbi-modeling-mcp)) — `setup` wraps the entry you already have; it doesn't install the upstream server.
+- **Power BI Desktop** open with your model, for the admin UI and warm-up scans to connect to.
+
+### Setup
+
 You never need to know the server command — the Claude app launches MCP servers, and `setup` rewires its config for you:
 
 ```bash
