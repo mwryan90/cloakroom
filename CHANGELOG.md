@@ -1,11 +1,11 @@
 # Changelog
 
-## 0.3.2 (`cloakroom` package only)
+## 0.3.2
 
 - README: prerequisites in the quickstart — Node >= 20 install guidance
   (nodejs.org / winget), PATH troubleshooting, and the requirement for an
-  existing Power BI MCP entry in Claude Desktop. Docs only, no code changes;
-  the library packages remain 0.3.1.
+  existing Power BI MCP entry in Claude Desktop. Docs only, no code changes.
+- All packages bumped in lockstep.
 
 ## 0.3.1
 

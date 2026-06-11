@@ -1,6 +1,6 @@
 {
   "name": "cloakroom-adapter-powerbi",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Power BI / semantic model adapter for cloakroom (powerbi-modeling-mcp)",
   "license": "MIT",
   "type": "module",
@@ -11,7 +11,7 @@
     }
   },
   "dependencies": {
-    "cloakroom-core": "0.3.1"
+    "cloakroom-core": "0.3.2"
   },
   "devDependencies": {
     "@types/node": "^22.0.0"

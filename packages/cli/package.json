@@ -14,10 +14,10 @@
     }
   },
   "dependencies": {
-    "cloakroom-adapter-powerbi": "0.3.1",
-    "cloakroom-core": "0.3.1",
+    "cloakroom-adapter-powerbi": "0.3.2",
+    "cloakroom-core": "0.3.2",
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "cloakroom-ui": "0.3.1"
+    "cloakroom-ui": "0.3.2"
   },
   "devDependencies": {
     "@types/node": "^22.0.0"
