@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.2 (`cloakroom` package only)
+
+- README: prerequisites in the quickstart — Node >= 20 install guidance
+  (nodejs.org / winget), PATH troubleshooting, and the requirement for an
+  existing Power BI MCP entry in Claude Desktop. Docs only, no code changes;
+  the library packages remain 0.3.1.
+
 ## 0.3.1
 
 - CLI prints a clear, boxed "admin UI is running / open in your browser: <url>"
