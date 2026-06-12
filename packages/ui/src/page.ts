@@ -112,9 +112,22 @@ function loadState() {
 }
 
 /* ---------- header: model switcher (only with 2+ models) ---------- */
-var lastModelsJson = "";
+var lastModelsJson = "", lastConnection = null;
 function loadModels() {
   api("/api/models").then(function(d){
+    // The server auto-reconnects when a model appears (e.g. Power BI was
+    // opened after the UI started) — refresh the page when that happens.
+    if (typeof d.connection === "string" && d.connection !== lastConnection) {
+      var prev = lastConnection;
+      lastConnection = d.connection;
+      loadState();
+      var nowOk = d.connection.indexOf("NOT CONNECTED") < 0;
+      var prevOk = prev !== null && prev.indexOf("NOT CONNECTED") < 0;
+      if (nowOk && !prevOk) {
+        if (prev !== null) msg("Connected: " + d.connection);
+        loadColumns();
+      }
+    }
     var j = JSON.stringify(d.models || []);
     if (j === lastModelsJson) return; // unchanged — keep dropdown state
     lastModelsJson = j;

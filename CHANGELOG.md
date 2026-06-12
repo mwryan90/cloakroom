@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.6
+
+- Admin UI auto-connects when a Power BI file is opened *after* the UI
+  started (previously the connection was only attempted once at startup, so
+  a UI launched too early — or reused via the ribbon button — stayed
+  "NOT CONNECTED" until restarted). The model list poll (every 15s) now
+  reconnects and refreshes the page when a model appears.
+
 ## 0.3.5
 
 - **Power BI ribbon button**: `setup` registers cloakroom in Power BI
