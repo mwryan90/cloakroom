@@ -1,6 +1,6 @@
 {
   "name": "cloakroom",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "Masking proxy for MCP servers: sensitive values never reach the agent's context. Power BI adapter included.",
   "license": "MIT",
   "type": "module",
@@ -14,10 +14,10 @@
     }
   },
   "dependencies": {
-    "cloakroom-adapter-powerbi": "0.3.6",
-    "cloakroom-core": "0.3.6",
+    "cloakroom-adapter-powerbi": "0.3.7",
+    "cloakroom-core": "0.3.7",
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "cloakroom-ui": "0.3.6"
+    "cloakroom-ui": "0.3.7"
   },
   "devDependencies": {
     "@types/node": "^22.0.0"
