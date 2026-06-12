@@ -2,6 +2,12 @@
 
 ## 0.3.4
 
+- **Power BI ribbon button**: `setup` registers cloakroom in Power BI
+  Desktop's External Tools ribbon (one click opens the admin UI); `unwrap`
+  removes it. Needs an elevated terminal to write under Program Files —
+  setup degrades gracefully and `--no-external-tool` skips it.
+- `cloakroom ui` now reuses an already-running instance instead of failing
+  with "port in use", and `--open` launches the browser.
 - Admin UI: the "mask all text" confirmation is now a styled in-page modal
   (lists the affected columns; Escape, overlay click, or Cancel dismiss it)
   instead of the browser's native confirm dialog.
