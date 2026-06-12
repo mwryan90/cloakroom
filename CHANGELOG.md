@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.3
+
+- **Case-insensitive masking**: the global sweep now catches known values in
+  any casing (e.g. a measure returning `UPPER([Customer Name])`). Exact-case
+  matches keep their own tokens; case variants get the canonical token.
+  Inbound unmasking is unchanged (exact tokens only).
+- Admin UI: **mask all text** button per table — adds a token rule (with
+  warm-up scan) for every untagged, unskipped text column in one click.
+- Admin UI: skipped columns ("Not sensitive") now show a **skipped** badge in
+  the column list and can be restored from the detail panel.
+- The UI header and MCP client/server versions now come from package.json
+  instead of a stale hardcoded string.
+
 ## 0.3.2
 
 - README: prerequisites in the quickstart — Node >= 20 install guidance

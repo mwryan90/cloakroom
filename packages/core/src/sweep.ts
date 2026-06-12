@@ -27,6 +27,7 @@ export function deepMapStrings<T>(value: T, fn: (s: string) => string): T {
 export class Sweeper {
   private maskRe: RegExp | null = null;
   private maskMap = new Map<string, string>();
+  private maskMapLower = new Map<string, string>();
   private unmaskRe: RegExp | null = null;
   private unmaskMap = new Map<string, string>();
   private builtAt = -1;
@@ -40,7 +41,10 @@ export class Sweeper {
   maskText(s: string): string {
     this.rebuildIfStale();
     if (!this.maskRe) return s;
-    return s.replace(this.maskRe, (m) => this.maskMap.get(m) ?? m);
+    // Exact-case lookup first so values differing only by case keep their own
+    // tokens; the case-insensitive fallback catches transformed appearances
+    // (UPPER() in a measure) and always emits the canonical token.
+    return s.replace(this.maskRe, (m) => this.maskMap.get(m) ?? this.maskMapLower.get(m.toLowerCase()) ?? m);
   }
 
   unmaskText(s: string): string {
@@ -64,24 +68,30 @@ export class Sweeper {
 
     const pairs = this.store.allTokens();
     this.maskMap.clear();
+    this.maskMapLower.clear();
     this.unmaskMap.clear();
     for (const { token, value } of pairs) {
       if (value.length > 0 && !this.excludedLower.has(value.toLowerCase())) {
         this.maskMap.set(value, token);
+        if (!this.maskMapLower.has(value.toLowerCase())) {
+          this.maskMapLower.set(value.toLowerCase(), token);
+        }
       }
       // Tokens always unmask, even for excluded values (harmless and lossless).
       this.unmaskMap.set(token, value);
     }
 
-    // Mask direction: plain substring match — over-masking is the safe
-    // direction. Unmask direction: word boundaries so "Client 1" never
-    // matches inside "Client 12".
-    this.maskRe = buildAlternation([...this.maskMap.keys()], false);
-    this.unmaskRe = buildAlternation([...this.unmaskMap.keys()], true);
+    // Mask direction: case-insensitive substring match — over-masking is the
+    // safe direction, and a known value must not slip through just because a
+    // measure UPPER()'d it. Unmask direction: exact case (tokens are
+    // proxy-generated) with word boundaries so "Client 1" never matches
+    // inside "Client 12".
+    this.maskRe = buildAlternation([...this.maskMap.keys()], false, true);
+    this.unmaskRe = buildAlternation([...this.unmaskMap.keys()], true, false);
   }
 }
 
-function buildAlternation(literals: string[], boundaries: boolean): RegExp | null {
+function buildAlternation(literals: string[], boundaries: boolean, caseInsensitive: boolean): RegExp | null {
   if (literals.length === 0) return null;
   const sorted = [...literals].sort((a, b) => b.length - a.length);
   // Short values (< 4 chars) always get word boundaries: substring-replacing
@@ -89,5 +99,5 @@ function buildAlternation(literals: string[], boundaries: boolean): RegExp | nul
   const parts = sorted.map((l) =>
     boundaries || l.length < 4 ? `\\b${escapeRegex(l)}\\b` : escapeRegex(l),
   );
-  return new RegExp(parts.join("|"), "g");
+  return new RegExp(parts.join("|"), caseInsensitive ? "gi" : "g");
 }

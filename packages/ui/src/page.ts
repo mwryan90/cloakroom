@@ -30,6 +30,9 @@ export const PAGE_HTML = `<!doctype html>
   .badge { font-size:10px; padding:1px 7px; border-radius:9px; border:1px solid; white-space:nowrap; }
   .badge.tagged { color:var(--ok); border-color:var(--ok); }
   .badge.sugg { color:var(--warn); border-color:var(--warn); }
+  .badge.skip { color:var(--dim); border-color:var(--dim); }
+  .tbl button.mask-all { font-size:10px; padding:1px 7px; margin-left:8px;
+    text-transform:none; letter-spacing:normal; vertical-align:1px; }
   table { border-collapse:collapse; width:100%; margin-top:10px; }
   th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); }
   th { color:var(--dim); font-weight:500; font-size:12px; }
@@ -65,7 +68,7 @@ export const PAGE_HTML = `<!doctype html>
 <div id="msg"></div>
 <script>
 "use strict";
-var UI_VERSION = "0.3.1";
+var UI_VERSION = "__CLOAKROOM_VERSION__";
 window.onerror = function(message, source, line){
   var b = document.getElementById("err");
   if (b) { b.textContent = "cloakroom ui error: " + message + " (line " + line + ") — please report this"; b.style.display = "block"; }
@@ -144,9 +147,14 @@ function renderColumns() {
   var tables = Object.keys(byTable).sort();
   if (tables.length === 0) h = '<div class="hint">No columns match.</div>';
   tables.forEach(function(t){
-    h += '<div class="tbl">' + esc(t) + '</div>';
+    var eligible = maskableTextColumns(t);
+    h += '<div class="tbl">' + esc(t) +
+         (eligible.length ? '<button class="mask-all" data-table="' + esc(t) +
+           '" title="Add a token rule for every unmasked text column in this table">mask all text (' +
+           eligible.length + ')</button>' : '') + '</div>';
     byTable[t].forEach(function(c){
       var badge = c.tagged ? '<span class="badge tagged">tagged</span>'
+                : c.dismissed ? '<span class="badge skip">skipped</span>'
                 : (c.suggested ? '<span class="badge sugg">suggested</span>' : '');
       var active = current && current.key === c.key ? " active" : "";
       h += '<div class="col' + active + '" data-key="' + esc(c.key) + '">' + esc(c.column) + badge +
@@ -158,6 +166,41 @@ function renderColumns() {
   for (var i = 0; i < nodes.length; i++) {
     (function(node){ node.onclick = function(){ select(node.getAttribute("data-key")); }; })(nodes[i]);
   }
+  var mbs = document.querySelectorAll(".mask-all");
+  for (var j = 0; j < mbs.length; j++) {
+    (function(b){ b.onclick = function(ev){ ev.stopPropagation(); maskAllText(b.getAttribute("data-table")); }; })(mbs[j]);
+  }
+}
+
+function maskableTextColumns(table) {
+  return columns.filter(function(c){
+    return c.table === table && c.dataType === "String" && !c.tagged && !c.dismissed;
+  });
+}
+
+function maskAllText(table) {
+  var eligible = maskableTextColumns(table);
+  if (eligible.length === 0) return;
+  if (!window.confirm("Mask " + eligible.length + " text column(s) in " + table +
+      "?\\n\\nEach gets a token rule and a warm-up scan. Excluded: tagged and skipped columns.")) return;
+  var done = 0;
+  var chain = Promise.resolve();
+  eligible.forEach(function(c){
+    chain = chain.then(function(){
+      return api("/api/rule", { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ match: c.key, mask: "token", prefix: guessPrefix(c.column), exclude: [] }) })
+      .then(function(){ done++; });
+    });
+  });
+  chain.then(function(){
+    msg("Masked " + done + " text column(s) in " + table + " — warm-up scans running");
+    loadState();
+    return loadColumns();
+  }).catch(function(e){
+    msg("Error after " + done + " of " + eligible.length + " columns: " + e.message);
+    loadState();
+    return loadColumns();
+  });
 }
 
 function loadColumns() {
@@ -201,7 +244,7 @@ function renderDetail(c, d) {
       '<button class="primary" id="f-save">' + (d.rule ? "Update rule" : "Mark as sensitive") + '</button>' +
       (d.rule ? '<button id="f-remove">Remove rule</button>' : '') +
       (c.suggested ? '<button id="f-dismiss" title="Hide the suggested badge for this column">Not sensitive</button>' : '') +
-      (c.dismissed ? '<span class="hint">suggestion dismissed</span><button id="f-undismiss">Restore</button>' : '') +
+      (c.dismissed ? '<span class="hint">skipped (marked not sensitive)</span><button id="f-undismiss" title="Un-skip: bring back the suggestion for this column">Restore</button>' : '') +
     '</div>' +
     '<div class="hint">Assign custom tokens below or leave blank for automatic numbering. ' +
     'Tick <b>skip</b> for placeholder values that should pass through unmasked.</div>';

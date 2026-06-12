@@ -144,6 +144,23 @@ test("admin UI API: discover, sample, save rule, assign mappings", async (t) => 
   assert.equal(email2?.suggested, false, "dismissed column no longer suggested");
   assert.equal(email2?.dismissed, true);
 
+  // ...and dismissal is reversible (un-skip).
+  const undis = await fetch(ui.url + "/api/dismiss", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-cloakroom": "1" },
+    body: JSON.stringify({ key: "Customer[Email]", undo: true }),
+  });
+  assert.ok(undis.ok);
+  const cols3 = (await (await fetch(ui.url + "/api/columns")).json()) as {
+    key: string;
+    dismissed: boolean;
+  }[];
+  assert.equal(
+    cols3.find((c) => c.key === "Customer[Email]")?.dismissed,
+    false,
+    "restored column no longer dismissed",
+  );
+
   // The decoder finds mappings by token AND by real value.
   const byToken = (await (
     await fetch(ui.url + "/api/lookup?q=" + encodeURIComponent("BigRetailer"))

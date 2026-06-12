@@ -1,5 +1,6 @@
 import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { createRequire } from "node:module";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -16,6 +17,9 @@ import {
   type ToolCaller,
 } from "cloakroom-core";
 import { PAGE_HTML } from "./page.js";
+
+const UI_VERSION: string = (createRequire(import.meta.url)("../package.json") as { version: string })
+  .version;
 
 const SUGGEST_RE =
   /(name|email|phone|mobile|address|contact|customer|client|company|trading|person|owner|supplier|vendor|account)/i;
@@ -49,7 +53,7 @@ export async function runUi(opts: UiOptions): Promise<UiHandle> {
     hmacSecret: process.env[cfg.hmacSecretEnv],
   });
 
-  const client = new Client({ name: "cloakroom-ui", version: "0.3.1" }, { capabilities: {} });
+  const client = new Client({ name: "cloakroom-ui", version: UI_VERSION }, { capabilities: {} });
   await client.connect(
     new StdioClientTransport({
       command: opts.upstreamCommand,
@@ -116,7 +120,7 @@ export async function runUi(opts: UiOptions): Promise<UiHandle> {
 
     if (req.method === "GET" && path === "/") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(PAGE_HTML);
+      res.end(PAGE_HTML.replace("__CLOAKROOM_VERSION__", UI_VERSION));
       return;
     }
 
