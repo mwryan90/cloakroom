@@ -47,18 +47,23 @@ export class Sweeper {
     return s.replace(this.maskRe, (m) => this.maskMap.get(m) ?? this.maskMapLower.get(m.toLowerCase()) ?? m);
   }
 
-  unmaskText(s: string): string {
+  unmaskText(s: string, onToken?: (token: string) => void): string {
     this.rebuildIfStale();
     if (!this.unmaskRe) return s;
-    return s.replace(this.unmaskRe, (m) => this.unmaskMap.get(m) ?? m);
+    return s.replace(this.unmaskRe, (m) => {
+      const v = this.unmaskMap.get(m);
+      if (v === undefined) return m;
+      if (onToken) onToken(m);
+      return v;
+    });
   }
 
   deepMask<T>(value: T): T {
     return deepMapStrings(value, (s) => this.maskText(s));
   }
 
-  deepUnmask<T>(value: T): T {
-    return deepMapStrings(value, (s) => this.unmaskText(s));
+  deepUnmask<T>(value: T, onToken?: (token: string) => void): T {
+    return deepMapStrings(value, (s) => this.unmaskText(s, onToken));
   }
 
   private rebuildIfStale(): void {

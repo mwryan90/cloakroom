@@ -4,6 +4,11 @@ import { RuleMatcher } from "./config.js";
 import type { MappingStore } from "./store.js";
 import { Sweeper } from "./sweep.js";
 
+export interface TokenRename {
+  from: string;
+  to: string;
+}
+
 export class UnknownTokenError extends Error {
   constructor(public tokens: string[]) {
     super(
@@ -75,7 +80,17 @@ export class MaskingPipeline {
    * fail closed if anything that *looks* like a token remains.
    */
   unmaskArgs<T>(args: T): T {
-    const out = this.sweeper.deepUnmask(args);
+    return this.unmaskArgsTracked(args).args;
+  }
+
+  /**
+   * Like unmaskArgs, but also reports which used tokens have been renamed
+   * (prefix re-token, manual rename) so the agent can be told to switch to
+   * the current names. Stale tokens still translate correctly.
+   */
+  unmaskArgsTracked<T>(args: T): { args: T; renames: TokenRename[] } {
+    const used = new Set<string>();
+    const out = this.sweeper.deepUnmask(args, (t) => used.add(t));
     const leftovers = new Set<string>();
     collectStrings(out, (s) => {
       for (const re of this.tokenShapes) {
@@ -85,7 +100,12 @@ export class MaskingPipeline {
       }
     });
     if (leftovers.size > 0) throw new UnknownTokenError([...leftovers]);
-    return out;
+    const renames: TokenRename[] = [];
+    for (const t of used) {
+      const to = this.store.renamedTo(t);
+      if (to) renames.push({ from: t, to });
+    }
+    return { args: out, renames };
   }
 
   /** Register values discovered with column context (adapter or warm-up). */

@@ -15,7 +15,7 @@ import { statSync } from "node:fs";
 import { createRequire } from "node:module";
 import type { SourceAdapter } from "./adapter.js";
 import { loadConfig, type MaskConfig } from "./config.js";
-import { MaskingPipeline, UnknownTokenError } from "./pipeline.js";
+import { MaskingPipeline, UnknownTokenError, type TokenRename } from "./pipeline.js";
 import { MappingStore } from "./store.js";
 
 /** Version of the running package — single source of truth is package.json. */
@@ -270,8 +270,11 @@ export async function runProxy(opts: ProxyOptions): Promise<void> {
     }
 
     let realArgs: Record<string, unknown>;
+    let renames: TokenRename[] = [];
     try {
-      realArgs = pipeline.unmaskArgs(args);
+      const tracked = pipeline.unmaskArgsTracked(args);
+      realArgs = tracked.args;
+      renames = tracked.renames;
     } catch (e) {
       if (e instanceof UnknownTokenError) return errorResult(e.message);
       throw e;
@@ -279,7 +282,24 @@ export async function runProxy(opts: ProxyOptions): Promise<void> {
 
     try {
       const result = await client.callTool({ name, arguments: realArgs });
-      return redactFileUris(pipeline.maskResult(name, result));
+      const masked = redactFileUris(pipeline.maskResult(name, result));
+      // The agent used a token that has since been renamed by the data
+      // owner. It still translated correctly, but results now show the new
+      // name — tell the agent so the mismatch doesn't read as an error.
+      if (renames.length > 0) {
+        const m = masked as { content?: unknown[] };
+        if (Array.isArray(m.content)) {
+          const list = renames.map((r) => `"${r.from}" is now "${r.to}"`).join("; ");
+          m.content.push({
+            type: "text" as const,
+            text:
+              `[cloakroom] Token rename notice: ${list}. ` +
+              `Your filter was applied correctly (old names still translate), but results display the new name. ` +
+              `Use the new name in future filters and when reporting to the user.`,
+          });
+        }
+      }
+      return masked;
     } catch (e) {
       // Upstream errors can echo filter values — mask before forwarding.
       return errorResult(pipeline.maskText(errMsg(e)));

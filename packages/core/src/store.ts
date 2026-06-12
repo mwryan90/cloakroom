@@ -32,6 +32,7 @@ export class MappingStore {
   private byValue = new Map<string, Mapping>(); // `${group}${value}`
   private byToken = new Map<string, string>(); // token -> real value
   private counters = new Map<string, number>(); // prefix -> next seq
+  private renamed = new Map<string, string>(); // superseded token -> current token
   /** Bumped on every insert so regex caches can invalidate. */
   version = 0;
 
@@ -130,6 +131,15 @@ export class MappingStore {
     return [...this.byToken.entries()].map(([token, value]) => ({ token, value }));
   }
 
+  /**
+   * If a token has been superseded by a re-assignment (prefix re-token,
+   * manual rename), the token currently in effect for the same value.
+   */
+  renamedTo(token: string): string | undefined {
+    this.refresh();
+    return this.renamed.get(token);
+  }
+
   /** Full mapping rows including column group (for the admin UI's decoder). */
   allMappings(): { group: string; value: string; token: string }[] {
     this.refresh(true);
@@ -162,11 +172,26 @@ export class MappingStore {
   }
 
   private insert(r: Record_): void {
+    this.noteSupersession(r);
     this.byValue.set(key(r.g, r.v), { token: r.t, seq: r.s });
     this.byToken.set(r.t, r.v);
     appendFileSync(this.filePath, JSON.stringify(r) + "\n", { encoding: "utf8", mode: 0o600 });
     this.loadedBytes = statSync(this.filePath).size;
     this.version++;
+  }
+
+  /** Track token renames so stale tokens can point at their replacement. */
+  private noteSupersession(r: Record_): void {
+    const prev = this.byValue.get(key(r.g, r.v));
+    if (!prev || prev.token === r.t) return;
+    this.renamed.set(prev.token, r.t);
+    // Re-point older aliases of the same value at the newest token.
+    for (const [old, cur] of this.renamed) {
+      if (cur === prev.token) this.renamed.set(old, r.t);
+    }
+    // The token now in effect is never itself an alias (handles rename-backs
+    // and full-file replays, where intermediate states invert briefly).
+    this.renamed.delete(r.t);
   }
 
   private load(): void {
@@ -182,6 +207,7 @@ export class MappingStore {
       } catch {
         continue; // tolerate a torn final line
       }
+      this.noteSupersession(r);
       this.byValue.set(key(r.g, r.v), { token: r.t, seq: r.s });
       this.byToken.set(r.t, r.v);
       if (r.s >= 0) {
