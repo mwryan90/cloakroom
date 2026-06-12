@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.4
+
+- Admin UI: the "mask all text" confirmation is now a styled in-page modal
+  (lists the affected columns; Escape, overlay click, or Cancel dismiss it)
+  instead of the browser's native confirm dialog.
+
 ## 0.3.3
 
 - **Case-insensitive masking**: the global sweep now catches known values in
