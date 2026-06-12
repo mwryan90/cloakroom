@@ -66,6 +66,7 @@ export async function runUi(opts: UiOptions): Promise<UiHandle> {
 
   let prepareStatus = "";
   let currentModel: string | undefined = cfg.model;
+  let connecting = false;
   const connectModel = async (model?: string): Promise<void> => {
     if (!opts.adapter.prepare) return;
     try {
@@ -138,7 +139,19 @@ export async function runUi(opts: UiOptions): Promise<UiHandle> {
 
     if (req.method === "GET" && path === "/api/models") {
       const models = opts.adapter.listModels ? await opts.adapter.listModels(call) : [];
-      sendJson(res, 200, { models, current: currentModel ?? models[0] ?? null });
+      // Auto-(re)connect: the UI may have started before any Power BI file
+      // was open (or been reused by the ribbon button long after). The page
+      // polls this endpoint every 15s, so a model that appears gets picked
+      // up without a restart.
+      if (models.length > 0 && prepareStatus.startsWith("NOT CONNECTED") && !connecting) {
+        connecting = true;
+        try {
+          await connectModel(currentModel);
+        } finally {
+          connecting = false;
+        }
+      }
+      sendJson(res, 200, { models, current: currentModel ?? models[0] ?? null, connection: prepareStatus });
       return;
     }
 

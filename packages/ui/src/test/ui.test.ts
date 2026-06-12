@@ -10,6 +10,61 @@ import { runUi } from "../index.js";
 const here = dirname(fileURLToPath(import.meta.url)); // packages/ui/dist/test
 const fakeUpstream = join(here, "..", "..", "..", "cli", "dist", "test", "fixtures", "fake-upstream.js");
 
+test("UI auto-connects when Power BI opens after startup", async (t) => {
+  const tmp = mkdtempSync(join(tmpdir(), "maskmcp-ui-late-"));
+  const cfgPath = join(tmp, "masking.yaml");
+  writeFileSync(
+    cfgPath,
+    [
+      `mappingStore: ${join(tmp, "map.jsonl")}`,
+      "columns:",
+      '  - match: "Customer[Customer Name]"',
+      "    prefix: Client",
+    ].join("\n"),
+  );
+
+  // No Power BI "open" until the flag file exists.
+  const flag = join(tmp, "pbi-open.flag");
+  process.env.FAKE_EMPTY_UNTIL_FILE = flag;
+  let ui;
+  try {
+    ui = await runUi({
+      configPath: cfgPath,
+      adapter: powerBiAdapter,
+      upstreamCommand: process.execPath,
+      upstreamArgs: [fakeUpstream],
+      port: 0,
+      log: () => {},
+    });
+  } finally {
+    delete process.env.FAKE_EMPTY_UNTIL_FILE; // child captured it at spawn
+  }
+  t.after(async () => {
+    await ui.close();
+  });
+
+  // Startup with nothing open → not connected, no models.
+  const st0 = (await (await fetch(ui.url + "/api/state")).json()) as { connection: string };
+  assert.match(st0.connection, /NOT CONNECTED/);
+  const m0 = (await (await fetch(ui.url + "/api/models")).json()) as {
+    models: string[];
+    connection: string;
+  };
+  assert.deepEqual(m0.models, []);
+  assert.match(m0.connection, /NOT CONNECTED/, "no auto-connect while nothing is open");
+
+  // "Open" Power BI; the next models poll must auto-connect.
+  writeFileSync(flag, "");
+  const m1 = (await (await fetch(ui.url + "/api/models")).json()) as {
+    models: string[];
+    connection: string;
+  };
+  assert.equal(m1.models.length, 2);
+  assert.match(m1.connection, /connected to Fake Model/, "models poll triggers reconnect");
+  const st1 = (await (await fetch(ui.url + "/api/state")).json()) as { connection: string };
+  assert.match(st1.connection, /connected to Fake Model/);
+});
+
 test("admin UI API: discover, sample, save rule, assign mappings", async (t) => {
   const tmp = mkdtempSync(join(tmpdir(), "maskmcp-ui-"));
   const cfgPath = join(tmp, "masking.yaml");

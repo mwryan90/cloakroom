@@ -4,6 +4,7 @@
  * containing "sensitive" customer names in the same shapes the real server
  * uses (CSV inside resource content blocks, JSON status text).
  */
+import { existsSync } from "node:fs";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -65,15 +66,17 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const request = (args.request ?? {}) as Record<string, unknown>;
     const op = String(request.operation ?? "").toLowerCase();
     if (op === "listlocalinstances") {
-      return text(
-        JSON.stringify({
-          success: true,
-          data: [
-            { connectionString: "Data Source=localhost:9999", parentWindowTitle: "Fake Model" },
-            { connectionString: "Data Source=localhost:9998", parentWindowTitle: "Other Model" },
-          ],
-        }),
-      );
+      // Lets tests simulate "no Power BI file open yet": while the flag file
+      // is absent, no instances exist; creating it "opens" Power BI.
+      const flag = process.env.FAKE_EMPTY_UNTIL_FILE;
+      const data =
+        flag && !existsSync(flag)
+          ? []
+          : [
+              { connectionString: "Data Source=localhost:9999", parentWindowTitle: "Fake Model" },
+              { connectionString: "Data Source=localhost:9998", parentWindowTitle: "Other Model" },
+            ];
+      return text(JSON.stringify({ success: true, data }));
     }
     return text(JSON.stringify({ success: true }));
   }
