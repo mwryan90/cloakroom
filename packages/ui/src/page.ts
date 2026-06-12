@@ -44,6 +44,13 @@ export const PAGE_HTML = `<!doctype html>
   .auto { color:var(--dim); font-style:italic; }
   #msg { position:fixed; bottom:14px; right:14px; background:var(--panel); border:1px solid var(--line);
          padding:9px 14px; border-radius:8px; display:none; max-width:420px; }
+  #modal { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none;
+           align-items:center; justify-content:center; z-index:50; }
+  #modal.open { display:flex; }
+  #modal-box { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+               padding:18px 20px; max-width:440px; box-shadow:0 8px 30px rgba(0,0,0,.4); }
+  #modal-text { white-space:pre-line; margin-bottom:14px; }
+  #modal-box .row { justify-content:flex-end; margin:0; }
   #err { position:fixed; top:0; left:0; right:0; background:#7a2030; color:#fff; padding:8px 14px;
          z-index:99; font:13px ui-monospace, monospace; display:none; }
 </style>
@@ -66,6 +73,10 @@ export const PAGE_HTML = `<!doctype html>
     This page shows real values — it is served on 127.0.0.1 only.</div></div>
 </main>
 <div id="msg"></div>
+<div id="modal"><div id="modal-box">
+  <div id="modal-text"></div>
+  <div class="row"><button id="modal-cancel">Cancel</button><button class="primary" id="modal-ok">Confirm</button></div>
+</div></div>
 <script>
 "use strict";
 var UI_VERSION = "__CLOAKROOM_VERSION__";
@@ -178,28 +189,54 @@ function maskableTextColumns(table) {
   });
 }
 
+function confirmModal(text, okLabel) {
+  return new Promise(function(resolve){
+    el("modal-text").textContent = text;
+    el("modal-ok").textContent = okLabel || "Confirm";
+    el("modal").className = "open";
+    function done(v) {
+      el("modal").className = "";
+      el("modal-ok").onclick = el("modal-cancel").onclick = el("modal").onclick = null;
+      document.removeEventListener("keydown", onKey);
+      resolve(v);
+    }
+    function onKey(e) { if (e.key === "Escape") done(false); }
+    el("modal-ok").onclick = function(){ done(true); };
+    el("modal-cancel").onclick = function(){ done(false); };
+    el("modal").onclick = function(e){ if (e.target === el("modal")) done(false); };
+    document.addEventListener("keydown", onKey);
+    el("modal-ok").focus();
+  });
+}
+
 function maskAllText(table) {
   var eligible = maskableTextColumns(table);
   if (eligible.length === 0) return;
-  if (!window.confirm("Mask " + eligible.length + " text column(s) in " + table +
-      "?\\n\\nEach gets a token rule and a warm-up scan. Excluded: tagged and skipped columns.")) return;
-  var done = 0;
-  var chain = Promise.resolve();
-  eligible.forEach(function(c){
-    chain = chain.then(function(){
-      return api("/api/rule", { method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ match: c.key, mask: "token", prefix: guessPrefix(c.column), exclude: [] }) })
-      .then(function(){ done++; });
+  confirmModal(
+    "Mask " + eligible.length + " text column(s) in " + table + "?\\n\\n" +
+    eligible.map(function(c){ return c.column; }).join(", ") + "\\n\\n" +
+    "Each gets a token rule and a warm-up scan. Tagged and skipped columns are not affected.",
+    "Mask " + eligible.length + " column(s)"
+  ).then(function(ok){
+    if (!ok) return;
+    var done = 0;
+    var chain = Promise.resolve();
+    eligible.forEach(function(c){
+      chain = chain.then(function(){
+        return api("/api/rule", { method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ match: c.key, mask: "token", prefix: guessPrefix(c.column), exclude: [] }) })
+        .then(function(){ done++; });
+      });
     });
-  });
-  chain.then(function(){
-    msg("Masked " + done + " text column(s) in " + table + " — warm-up scans running");
-    loadState();
-    return loadColumns();
-  }).catch(function(e){
-    msg("Error after " + done + " of " + eligible.length + " columns: " + e.message);
-    loadState();
-    return loadColumns();
+    return chain.then(function(){
+      msg("Masked " + done + " text column(s) in " + table + " — warm-up scans running");
+      loadState();
+      return loadColumns();
+    }).catch(function(e){
+      msg("Error after " + done + " of " + eligible.length + " columns: " + e.message);
+      loadState();
+      return loadColumns();
+    });
   });
 }
 

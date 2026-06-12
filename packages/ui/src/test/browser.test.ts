@@ -112,7 +112,6 @@ test("browser: skip/restore a column and mask all text columns in a table", asyn
   const pageErrors: string[] = [];
   const vc = new VirtualConsole();
   vc.on("jsdomError", (e) => pageErrors.push(String(e)));
-  const confirms: string[] = [];
   const dom = new JSDOM(html, {
     url: ui.url + "/",
     runScripts: "dangerously",
@@ -120,10 +119,6 @@ test("browser: skip/restore a column and mask all text columns in a table", asyn
     beforeParse(window) {
       (window as unknown as { fetch: typeof fetch }).fetch = ((path: string, opts?: RequestInit) =>
         fetch(new URL(path, ui.url).href, opts)) as typeof fetch;
-      window.confirm = (m?: string) => {
-        confirms.push(m ?? "");
-        return true;
-      };
     },
   });
   const win = dom.window;
@@ -157,9 +152,24 @@ test("browser: skip/restore a column and mask all text columns in a table", asyn
   const maskAll = doc.querySelector(".mask-all")!;
   assert.ok(maskAll, "mask-all button visible again after restore");
   assert.ok(maskAll.textContent!.includes("(1)"), "eligible count shown");
+
+  // The confirmation is an in-page modal: cancelling writes nothing.
   click(maskAll);
+  await sleep(150);
+  const modal = doc.getElementById("modal")!;
+  assert.equal(modal.className, "open", "confirmation modal opens");
+  assert.ok(doc.getElementById("modal-text")!.textContent!.includes("Email"), "modal lists the columns");
+  click(doc.getElementById("modal-cancel")!);
+  await sleep(300);
+  assert.equal(modal.className, "", "modal closes on cancel");
+  assert.ok(!readFileSync(cfgPath, "utf8").includes("Customer[Email]"), "cancel must not write rules");
+
+  // Confirming masks the column.
+  click(doc.querySelector(".mask-all")!);
+  await sleep(150);
+  click(doc.getElementById("modal-ok")!);
   await sleep(900);
-  assert.equal(confirms.length, 1, "bulk masking asks for confirmation");
+  assert.equal(modal.className, "", "modal closes on confirm");
   assert.deepEqual(pageErrors, [], "no page errors during skip/restore/mask-all");
   assert.ok(readFileSync(cfgPath, "utf8").includes("Customer[Email]"), "rule written for text column");
   assert.ok(colNode("Customer[Email]")!.innerHTML.includes("tagged"), "column now tagged in list");
