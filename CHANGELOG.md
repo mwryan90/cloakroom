@@ -2,6 +2,11 @@
 
 ## 0.3.6
 
+- Branding: "Cloakroom" capitalized in the Power BI ribbon and the admin UI
+  header; the logo now appears in the UI header and as the favicon (one
+  embedded icon shared by the UI and the ribbon button).
+- The admin UI status line labels the masking config path ("config: ...")
+  so it reads as the live setting it is.
 - Admin UI auto-connects when a Power BI file is opened *after* the UI
   started (previously the connection was only attempted once at startup, so
   a UI launched too early — or reused via the ribbon button — stayed

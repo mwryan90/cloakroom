@@ -16,7 +16,10 @@ import {
   type SourceAdapter,
   type ToolCaller,
 } from "cloakroom-core";
+import { CLOAKROOM_ICON_DATA_URI } from "./icon.js";
 import { PAGE_HTML } from "./page.js";
+
+export { CLOAKROOM_ICON_DATA_URI } from "./icon.js";
 
 const UI_VERSION: string = (createRequire(import.meta.url)("../package.json") as { version: string })
   .version;
@@ -121,7 +124,12 @@ export async function runUi(opts: UiOptions): Promise<UiHandle> {
 
     if (req.method === "GET" && path === "/") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(PAGE_HTML.replace("__CLOAKROOM_VERSION__", UI_VERSION));
+      res.end(
+        PAGE_HTML.replace("__CLOAKROOM_VERSION__", UI_VERSION).replaceAll(
+          "__CLOAKROOM_ICON__",
+          CLOAKROOM_ICON_DATA_URI,
+        ),
+      );
       return;
     }
 

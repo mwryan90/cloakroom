@@ -4,7 +4,8 @@ export const PAGE_HTML = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>cloakroom admin</title>
+<title>Cloakroom admin</title>
+<link rel="icon" type="image/png" href="__CLOAKROOM_ICON__">
 <style>
   :root { --bg:#0f1115; --panel:#181b22; --line:#2a2f3a; --text:#e6e9ef; --dim:#9aa3b2;
           --accent:#5b9dd9; --ok:#4caf7d; --warn:#d9a05b; }
@@ -58,7 +59,8 @@ export const PAGE_HTML = `<!doctype html>
 <body>
 <div id="err"></div>
 <header>
-  <h1>cloakroom</h1>
+  <img src="__CLOAKROOM_ICON__" alt="" style="width:24px;height:24px">
+  <h1>Cloakroom</h1>
   <span id="model-slot"></span>
   <button id="view-toggle" title="Browse every token / real value mapping">Mappings</button>
   <span class="meta" id="state"></span>
@@ -107,7 +109,7 @@ function loadState() {
     el("state").textContent = "v" + UI_VERSION + " · " + s.adapter +
       (s.connection ? " · " + s.connection : "") +
       " · " + s.tokenMode + " tokens · " + s.storeCount + " mappings · " +
-      s.rules.length + " rules · " + s.configPath;
+      s.rules.length + " rules · config: " + s.configPath;
   }).catch(function(){ /* state line is cosmetic */ });
 }
 
