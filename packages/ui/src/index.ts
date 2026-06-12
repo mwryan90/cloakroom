@@ -10,6 +10,7 @@ import {
   MappingStore,
   RuleMatcher,
   compileRules,
+  formatToken,
   loadConfig,
   type ColumnRule,
   type MaskConfig,
@@ -317,6 +318,55 @@ export async function runUi(opts: UiOptions): Promise<UiHandle> {
       return;
     }
 
+    if (req.method === "POST" && path === "/api/retoken") {
+      // Rename existing sequential tokens after a prefix change, preserving
+      // numbers ("Client 5" -> "Customer 5"). Custom tokens are never touched.
+      // The store keeps old names unmasking (newest assignment wins for
+      // masking; older tokens still translate inbound).
+      const body = (await readBody(req)) as { match?: string; fromPrefix?: string };
+      if (!body.match || !body.fromPrefix) {
+        sendJson(res, 400, { error: "match and fromPrefix are required" });
+        return;
+      }
+      const rule = matcher.byMatchString(body.match);
+      if (!rule) {
+        sendJson(res, 400, { error: "no rule found for match — save the rule first" });
+        return;
+      }
+      if (cfg.tokenMode === "hmac") {
+        sendJson(res, 400, { error: "re-tokening applies to sequential mode only (hmac tokens derive from the value)" });
+        return;
+      }
+      const mask = rule.rule.mask;
+      const toPrefix = rule.rule.prefix;
+      const oldRe =
+        mask === "email"
+          ? new RegExp(`^${escapeRegex(body.fromPrefix.toLowerCase())}(\\d+)@masked\\.example$`)
+          : new RegExp(`^${escapeRegex(body.fromPrefix)} (\\d+)$`);
+      let renamed = 0;
+      let kept = 0;
+      let conflicts = 0;
+      for (const m of store.allMappings()) {
+        if (m.group !== rule.groupId) continue;
+        const hit = oldRe.exec(m.token);
+        if (!hit) {
+          kept++; // custom token — never renamed
+          continue;
+        }
+        const newToken = formatToken(toPrefix, mask, Number(hit[1]));
+        if (newToken === m.token) continue;
+        try {
+          store.assignToken(rule.groupId, toPrefix, m.value, newToken);
+          renamed++;
+        } catch {
+          conflicts++; // target token taken by another value — keep the old one
+        }
+      }
+      log(`[cloakroom ui] re-token ${rule.rule.match}: ${renamed} renamed, ${kept} custom kept, ${conflicts} conflicts`);
+      sendJson(res, 200, { ok: true, renamed, kept, conflicts });
+      return;
+    }
+
     if (req.method === "GET" && path === "/api/mappings-list") {
       // Full mapping table for the human owner: token, real value, column group.
       const limit = Math.min(Number(url.searchParams.get("limit") ?? 5000), 20000);
@@ -383,6 +433,10 @@ export async function runUi(opts: UiOptions): Promise<UiHandle> {
       await client.close();
     },
   };
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function safeMtime(path: string): number {

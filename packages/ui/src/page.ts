@@ -318,8 +318,8 @@ function renderDetail(c, d) {
          "Save the rule first, then apply mappings.") + '</span></div>';
   el("right").innerHTML = h;
 
-  el("f-save").onclick = function(){ saveRule(c, false); };
-  if (el("f-remove")) el("f-remove").onclick = function(){ saveRule(c, true); };
+  el("f-save").onclick = function(){ saveRule(c, false, d.rule ? d.rule.prefix : null); };
+  if (el("f-remove")) el("f-remove").onclick = function(){ saveRule(c, true, null); };
   if (el("f-dismiss")) el("f-dismiss").onclick = function(){ dismiss(c, false); };
   if (el("f-undismiss")) el("f-undismiss").onclick = function(){ dismiss(c, true); };
   el("f-apply").onclick = function(){ applyMappings(c); };
@@ -348,15 +348,37 @@ function guessPrefix(name) {
   return "Value";
 }
 
-function saveRule(c, remove) {
+function saveRule(c, remove, oldPrefix) {
   var exclude = el("f-exclude").value.split(",").map(function(s){ return s.trim(); }).filter(Boolean);
+  var newPrefix = el("f-prefix").value;
   api("/api/rule", { method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ match: c.key, mask: el("f-mask").value, prefix: el("f-prefix").value,
+    body: JSON.stringify({ match: c.key, mask: el("f-mask").value, prefix: newPrefix,
       exclude: exclude, remove: remove }) })
   .then(function(r){
     msg(remove ? "Rule removed" : (r.warmup === "started" ? "Rule saved — scanning column values…" : "Rule saved"));
-    loadState();
-    return loadColumns().then(function(){ select(c.key); }); })
+    var done = function(){ loadState(); return loadColumns().then(function(){ select(c.key); }); };
+    // Tokens are stable by design: a prefix change only affects future
+    // values. Offer to rename the existing sequential tokens too.
+    if (!remove && oldPrefix && oldPrefix !== newPrefix) {
+      return confirmModal(
+        'Prefix changed from "' + oldPrefix + '" to "' + newPrefix + '".\\n\\n' +
+        'Existing tokens keep their names by design (they are stable anchors). ' +
+        'Rename them too ("' + oldPrefix + ' 5" becomes "' + newPrefix + ' 5")?\\n\\n' +
+        'Custom tokens are kept, and old names still translate in queries.',
+        "Rename existing tokens"
+      ).then(function(ok){
+        if (!ok) return done();
+        return api("/api/retoken", { method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ match: c.key, fromPrefix: oldPrefix }) })
+        .then(function(rr){
+          msg("Renamed " + rr.renamed + " token(s) to \\"" + newPrefix + "\\"" +
+              (rr.conflicts ? " — " + rr.conflicts + " skipped (name taken)" : ""));
+          return done();
+        });
+      });
+    }
+    return done();
+  })
   .catch(function(e){ msg("Error: " + e.message); });
 }
 

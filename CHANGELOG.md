@@ -2,6 +2,10 @@
 
 ## 0.3.6
 
+- Changing a rule's prefix now offers to rename the existing sequential
+  tokens too ("Client 5" → "Customer 5", numbers preserved; custom tokens
+  untouched; old names still translate inbound). Previously the new prefix
+  silently applied only to future values.
 - Branding: "Cloakroom" capitalized in the Power BI ribbon and the admin UI
   header; the logo now appears in the UI header and as the favicon (one
   embedded icon shared by the UI and the ribbon button).

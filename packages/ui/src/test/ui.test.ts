@@ -65,6 +65,70 @@ test("UI auto-connects when Power BI opens after startup", async (t) => {
   assert.match(st1.connection, /connected to Fake Model/);
 });
 
+test("re-token renames sequential tokens to a new prefix, keeps custom tokens", async (t) => {
+  const tmp = mkdtempSync(join(tmpdir(), "maskmcp-ui-retoken-"));
+  const cfgPath = join(tmp, "masking.yaml");
+  writeFileSync(
+    cfgPath,
+    [
+      `mappingStore: ${join(tmp, "map.jsonl")}`,
+      "columns:",
+      '  - match: "Customer[Customer Name]"',
+      "    prefix: Client",
+    ].join("\n"),
+  );
+  const ui = await runUi({
+    configPath: cfgPath,
+    adapter: powerBiAdapter,
+    upstreamCommand: process.execPath,
+    upstreamArgs: [fakeUpstream],
+    port: 0,
+    log: () => {},
+  });
+  t.after(async () => {
+    await ui.close();
+  });
+  const post = (path: string, body: unknown) =>
+    fetch(ui.url + path, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-cloakroom": "1" },
+      body: JSON.stringify(body),
+    });
+
+  // Two automatic tokens (Client 1/2) and one custom.
+  await post("/api/mappings", {
+    match: "Customer[Customer Name]",
+    assignments: [
+      { value: "Contoso Ltd" },
+      { value: "Fabrikam Inc" },
+      { value: "Adventure Works", token: "BigRetailer" },
+    ],
+  });
+
+  // Change the prefix, then rename existing tokens.
+  await post("/api/rule", { match: "Customer[Customer Name]", mask: "token", prefix: "Customer" });
+  const rr = (await (
+    await post("/api/retoken", { match: "Customer[Customer Name]", fromPrefix: "Client" })
+  ).json()) as { renamed: number; kept: number; conflicts: number };
+  assert.equal(rr.renamed, 2, "both sequential tokens renamed");
+  assert.equal(rr.kept, 1, "custom token kept");
+  assert.equal(rr.conflicts, 0);
+
+  const list = (await (await fetch(ui.url + "/api/mappings-list")).json()) as {
+    mappings: { value: string; token: string }[];
+  };
+  const tok = (v: string) => list.mappings.find((m) => m.value === v)?.token;
+  assert.equal(tok("Contoso Ltd"), "Customer 1", "number preserved across rename");
+  assert.equal(tok("Fabrikam Inc"), "Customer 2");
+  assert.equal(tok("Adventure Works"), "BigRetailer", "custom token untouched");
+
+  // Re-running is a no-op (old pattern no longer matches anything).
+  const rr2 = (await (
+    await post("/api/retoken", { match: "Customer[Customer Name]", fromPrefix: "Client" })
+  ).json()) as { renamed: number };
+  assert.equal(rr2.renamed, 0);
+});
+
 test("admin UI API: discover, sample, save rule, assign mappings", async (t) => {
   const tmp = mkdtempSync(join(tmpdir(), "maskmcp-ui-"));
   const cfgPath = join(tmp, "masking.yaml");
