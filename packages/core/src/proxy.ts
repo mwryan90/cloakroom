@@ -12,10 +12,16 @@ import {
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { statSync } from "node:fs";
+import { createRequire } from "node:module";
 import type { SourceAdapter } from "./adapter.js";
 import { loadConfig, type MaskConfig } from "./config.js";
 import { MaskingPipeline, UnknownTokenError } from "./pipeline.js";
 import { MappingStore } from "./store.js";
+
+/** Version of the running package — single source of truth is package.json. */
+export const CLOAKROOM_VERSION: string = (
+  createRequire(import.meta.url)("../package.json") as { version: string }
+).version;
 
 export interface ProxyOptions {
   config: MaskConfig;
@@ -48,7 +54,7 @@ export async function runProxy(opts: ProxyOptions): Promise<void> {
   const log = (line: string) => rawLog(pipeline.maskText(line));
 
   // ---- upstream (real server) ----
-  const client = new Client({ name: "cloakroom-proxy", version: "0.3.1" }, { capabilities: {} });
+  const client = new Client({ name: "cloakroom-proxy", version: CLOAKROOM_VERSION }, { capabilities: {} });
   const transport = new StdioClientTransport({
     command: opts.upstreamCommand,
     args: opts.upstreamArgs,
@@ -122,7 +128,7 @@ export async function runProxy(opts: ProxyOptions): Promise<void> {
   // BI server's DAX guidance docs) survive the proxy — masked like all else.
   const upstreamCaps = client.getServerCapabilities() ?? {};
   const server = new Server(
-    { name: "cloakroom", version: "0.3.1" },
+    { name: "cloakroom", version: CLOAKROOM_VERSION },
     {
       capabilities: {
         tools: {},

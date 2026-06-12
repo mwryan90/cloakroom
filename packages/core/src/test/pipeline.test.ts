@@ -167,6 +167,28 @@ test("excluded values are never registered or swept", () => {
   assert.ok(!after.includes("Contoso Ltd"));
 });
 
+test("case-variant appearances of known values are masked (UPPER'd measure output)", () => {
+  const { pipeline } = makePipeline();
+  pipeline.maskResult("query", { rows: [{ "Customer[Customer Name]": "Contoso Ltd" }] }); // Client 1
+  const masked = pipeline.maskText("Top customer: CONTOSO LTD (also contoso ltd, CoNtOsO lTd)");
+  assert.ok(!/contoso/i.test(masked), "no case variant may survive");
+  assert.equal((masked.match(/Client 1/g) ?? []).length, 3, "all variants get the canonical token");
+  // Inbound unmasking still emits the canonical-case real value.
+  const args = pipeline.unmaskArgs({ q: 'name = "Client 1"' });
+  assert.ok(JSON.stringify(args).includes("Contoso Ltd"));
+});
+
+test("values differing only by case keep their own tokens on exact match", () => {
+  const { pipeline } = makePipeline();
+  pipeline.maskResult("query", {
+    rows: [{ "Customer[Customer Name]": "Contoso Ltd" }, { "Customer[Customer Name]": "CONTOSO LTD" }],
+  }); // Client 1, Client 2
+  const masked = pipeline.maskText("a: Contoso Ltd, b: CONTOSO LTD, c: cOnToSo LtD");
+  assert.ok(masked.includes("a: Client 1"), "exact case → its own token");
+  assert.ok(masked.includes("b: Client 2"), "exact case → its own token");
+  assert.ok(!/contoso/i.test(masked), "unseen case variant still masked (canonical fallback)");
+});
+
 test("short values are masked with word boundaries, not substring-replaced", () => {
   const { pipeline } = makePipeline();
   pipeline.maskResult("query", { rows: [{ "Customer[Customer Name]": "AB" }] }); // Client 1
