@@ -32,6 +32,28 @@ test("mappings persist across reopen", () => {
   b.close();
 });
 
+test("renamedTo tracks supersession chains and survives reopen", () => {
+  const path = tmpDb();
+  const a = new MappingStore(path, { mode: "sequential" });
+  a.getOrCreateToken("g", "Client", "token", "Contoso Ltd"); // Client 1
+  a.assignToken("g", "Customer", "Contoso Ltd", "Customer 1");
+  assert.equal(a.renamedTo("Client 1"), "Customer 1");
+  assert.equal(a.renamedTo("Customer 1"), undefined, "current token is not an alias");
+
+  // Chain: a second rename re-points the oldest alias too.
+  a.assignToken("g", "Acct", "Contoso Ltd", "Acct 1");
+  assert.equal(a.renamedTo("Client 1"), "Acct 1");
+  assert.equal(a.renamedTo("Customer 1"), "Acct 1");
+  a.close();
+
+  // Reopen: the chain is rebuilt from the append-only log.
+  const b = new MappingStore(path, { mode: "sequential" });
+  assert.equal(b.renamedTo("Client 1"), "Acct 1");
+  assert.equal(b.renamedTo("Customer 1"), "Acct 1");
+  assert.equal(b.renamedTo("Acct 1"), undefined);
+  b.close();
+});
+
 test("hmac mode is deterministic across machines (stores)", () => {
   const a = new MappingStore(tmpDb(), { mode: "hmac", hmacSecret: "team-secret" });
   const b = new MappingStore(tmpDb(), { mode: "hmac", hmacSecret: "team-secret" });

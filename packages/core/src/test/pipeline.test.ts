@@ -189,6 +189,26 @@ test("values differing only by case keep their own tokens on exact match", () =>
   assert.ok(!/contoso/i.test(masked), "unseen case variant still masked (canonical fallback)");
 });
 
+test("stale tokens still unmask and report their rename", () => {
+  const { pipeline, store } = makePipeline();
+  pipeline.maskResult("query", { rows: [{ "Customer[Customer Name]": "Contoso Ltd" }] }); // Client 1
+  // Data owner renames the token (prefix re-token or manual rename).
+  store.assignToken("customer[customer name]", "Customer", "Contoso Ltd", "Customer 1");
+
+  // Old token: translates correctly AND reports the rename.
+  const tracked = pipeline.unmaskArgsTracked({ q: 'name = "Client 1"' });
+  assert.ok(JSON.stringify(tracked.args).includes("Contoso Ltd"), "stale token still translates");
+  assert.deepEqual(tracked.renames, [{ from: "Client 1", to: "Customer 1" }]);
+
+  // Current token: no rename notice.
+  const current = pipeline.unmaskArgsTracked({ q: 'name = "Customer 1"' });
+  assert.ok(JSON.stringify(current.args).includes("Contoso Ltd"));
+  assert.deepEqual(current.renames, []);
+
+  // Outbound masking emits the new token.
+  assert.ok(pipeline.maskText("for Contoso Ltd").includes("Customer 1"));
+});
+
 test("short values are masked with word boundaries, not substring-replaced", () => {
   const { pipeline } = makePipeline();
   pipeline.maskResult("query", { rows: [{ "Customer[Customer Name]": "AB" }] }); // Client 1

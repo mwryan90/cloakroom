@@ -2,6 +2,11 @@
 
 ## 0.3.6
 
+- When the agent uses a token that has since been renamed ("Client 5" after
+  a re-token to "Customer 5"), the proxy appends a notice to the tool result
+  explaining the rename — the filter still worked, results show the new
+  name, and the agent is told to use it going forward. Notices contain only
+  tokens, never real values.
 - Changing a rule's prefix now offers to rename the existing sequential
   tokens too ("Client 5" → "Customer 5", numbers preserved; custom tokens
   untouched; old names still translate inbound). Previously the new prefix
