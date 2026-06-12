@@ -98,9 +98,12 @@ test("admin UI API: discover, sample, save rule, assign mappings", async (t) => 
   });
   assert.equal(noHeader.status, 403);
 
-  // Serves the page.
+  // Serves the page, branded and with the favicon embedded.
   const page = await (await fetch(ui.url + "/")).text();
-  assert.ok(page.includes("cloakroom admin"));
+  assert.ok(page.includes("Cloakroom admin"));
+  assert.ok(page.includes('rel="icon"'), "favicon link present");
+  assert.ok(!page.includes("__CLOAKROOM_ICON__"), "icon placeholder replaced");
+  assert.ok(!page.includes("__CLOAKROOM_VERSION__"), "version placeholder replaced");
 
   // Schema discovery with tagged/suggested flags.
   const cols = (await (await fetch(ui.url + "/api/columns")).json()) as {

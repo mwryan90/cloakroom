@@ -21,7 +21,7 @@ test("Power BI external tool installs valid JSON and removes cleanly", () => {
       arguments: string;
       iconData: string;
     };
-    assert.equal(tool.name, "cloakroom");
+    assert.equal(tool.name, "Cloakroom");
     assert.ok(tool.arguments.includes("cloakroom ui --open"), "click launches/reuses the admin UI");
     assert.ok(tool.iconData.startsWith("data:image/png;base64,"), "icon is an embedded PNG data URI");
     assert.ok(tool.iconData.length > 1000, "icon actually embedded, not a placeholder");
