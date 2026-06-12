@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawn } from "node:child_process";
 import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +15,7 @@ import {
   upstreamOf,
   wrapServer,
 } from "./claude-config.js";
+import { installExternalTool, removeExternalTool } from "./external-tool.js";
 
 const EXAMPLE_CONFIG = `# cloakroom configuration
 # Values seen in these columns are replaced with stable tokens before they
@@ -44,16 +46,20 @@ function usage(): never {
   process.stderr.write(
     `Usage:
   cloakroom setup  [--server <name>] [--config masking.yaml] [--claude-config <path>]
+                   [--no-external-tool]
       One-time install: wraps an MCP server entry in Claude Desktop's config so
       the app launches cloakroom automatically. No commands to copy. Restart
-      Claude Desktop afterwards.
+      Claude Desktop afterwards. Also adds a cloakroom button to Power BI
+      Desktop's External Tools ribbon (skip with --no-external-tool).
 
   cloakroom unwrap [--server <name>] [--claude-config <path>]
-      Undo setup; restores the original server entry.
+      Undo setup; restores the original server entry and removes the Power BI
+      ribbon button.
 
-  cloakroom ui     [--server <name>] [--config masking.yaml] [--port 7682]
+  cloakroom ui     [--server <name>] [--config masking.yaml] [--port 7682] [--open]
       Open the admin page (review columns, assign tokens, exclude placeholders).
       Finds the server via Claude Desktop's config -- no command needed.
+      Reuses an already-running instance; --open launches your browser.
 
   cloakroom init   [--config masking.yaml]
       Write an example masking.yaml.
@@ -132,6 +138,34 @@ function resolveFromClaude(
   };
 }
 
+function openBrowser(url: string): void {
+  const [cmd, args]: [string, string[]] =
+    process.platform === "win32"
+      ? ["cmd", ["/c", "start", "", url]]
+      : process.platform === "darwin"
+        ? ["open", [url]]
+        : ["xdg-open", [url]];
+  try {
+    spawn(cmd, args, { detached: true, stdio: "ignore" }).unref();
+  } catch {
+    // Banner already shows the URL; opening the browser is best-effort.
+  }
+}
+
+/** True if a cloakroom admin UI is already serving on this port. */
+async function probeExistingUi(port: number): Promise<boolean> {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/state`, {
+      signal: AbortSignal.timeout(700),
+    });
+    if (!res.ok) return false;
+    const state = (await res.json()) as { configPath?: unknown };
+    return typeof state.configPath === "string";
+  } catch {
+    return false;
+  }
+}
+
 function ensureMaskingConfig(configPath: string): string {
   const p = resolve(configPath);
   if (!existsSync(p)) {
@@ -149,6 +183,8 @@ async function main(): Promise<void> {
   let serverName: string | undefined;
   let claudeConfigArg: string | undefined;
   let port: number | undefined;
+  let open = false;
+  let noExternalTool = false;
   let mode: "proxy" | "init" | "ui" | "setup" | "unwrap" = "proxy";
   let upstream: string[] = [];
 
@@ -160,6 +196,8 @@ async function main(): Promise<void> {
     else if (a === "--server") serverName = argv[++i] ?? usage();
     else if (a === "--claude-config") claudeConfigArg = argv[++i] ?? usage();
     else if (a === "--port") port = Number(argv[++i] ?? usage());
+    else if (a === "--open") open = true;
+    else if (a === "--no-external-tool") noExternalTool = true;
     else if (a === "--") {
       upstream = argv.slice(i + 1);
       break;
@@ -181,6 +219,11 @@ async function main(): Promise<void> {
         `[cloakroom] "${target.serverName}" is already protected by cloakroom. Nothing to do.\n` +
           `  Run "cloakroom ui" to choose which columns to mask.\n`,
       );
+      // Still (re)install the ribbon button so existing installs pick it up.
+      if (!noExternalTool) {
+        const ext = installExternalTool();
+        process.stderr.write(`[cloakroom] ${ext.message}\n`);
+      }
       return;
     }
     const masking = ensureMaskingConfig(configPath);
@@ -189,12 +232,14 @@ async function main(): Promise<void> {
       ? undefined // published install -> default npx launcher
       : { command: process.execPath, args: [selfPath] };
     wrapServer(target.configPath, target.serverName, masking, adapterName, launcher);
+    const ext = noExternalTool ? null : installExternalTool();
     process.stderr.write(
       `\n${"=".repeat(56)}\n` +
         `  cloakroom is now wrapping "${target.serverName}"\n` +
         `  config: ${target.configPath} (backup saved as .bak)\n` +
-        `  masking rules: ${masking}\n\n` +
-        `  NEXT STEPS:\n` +
+        `  masking rules: ${masking}\n` +
+        (ext ? `  ${ext.message}\n` : "") +
+        `\n  NEXT STEPS:\n` +
         `  1. Fully quit and reopen Claude Desktop (not just close the window)\n` +
         `  2. Open your model in Power BI Desktop\n` +
         `  3. Run "npx cloakroom ui" to choose which columns to mask\n` +
@@ -209,8 +254,10 @@ async function main(): Promise<void> {
       fail(`"${target.serverName}" is not wrapped by cloakroom -- nothing to undo.`);
     }
     unwrapServer(target.configPath, target.serverName);
+    const ext = removeExternalTool();
     process.stderr.write(
       `[cloakroom] restored "${target.serverName}" in ${target.configPath}.\n` +
+        (ext ? `  ${ext.message}\n` : "") +
         `  Restart Claude Desktop for it to take effect.\n`,
     );
     return;
@@ -222,6 +269,20 @@ async function main(): Promise<void> {
   };
   if (!(adapterName in adapters)) usage();
   const adapter = adapters[adapterName];
+
+  // Reuse a running admin UI instead of dying with "port in use" — this is
+  // what makes the Power BI ribbon button idempotent.
+  if (mode === "ui") {
+    const uiPort = port ?? 7682;
+    if (uiPort > 0 && (await probeExistingUi(uiPort))) {
+      const url = `http://127.0.0.1:${uiPort}`;
+      process.stderr.write(
+        `[cloakroom] admin UI already running at ${url}${open ? " -- opening browser" : ""}\n`,
+      );
+      if (open) openBrowser(url);
+      return;
+    }
+  }
 
   // No explicit upstream command? Discover it via Claude Desktop's config.
   let wrapped = true;
@@ -277,6 +338,7 @@ async function main(): Promise<void> {
     };
     banner();
     setTimeout(banner, 1500).unref();
+    if (open) openBrowser(handle.url);
     return; // server keeps the process alive
   }
 
