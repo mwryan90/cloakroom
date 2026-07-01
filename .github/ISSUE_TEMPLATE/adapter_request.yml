@@ -1,0 +1,38 @@
+name: Adapter request
+description: Propose support for a new data-serving MCP server
+labels: ["adapter"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Adapters let Cloakroom's masking core work against a new MCP server.
+        See [CONTRIBUTING.md](../../blob/main/CONTRIBUTING.md#adding-an-adapter)
+        and the [roadmap](../../blob/main/ROADMAP.md). Even without code, these
+        details help scope the work.
+  - type: input
+    id: server
+    attributes:
+      label: Which MCP server?
+      placeholder: "Name + link to its docs / tool list"
+    validations:
+      required: true
+  - type: textarea
+    id: shape
+    attributes:
+      label: Result shape
+      description: How do query results look? Are columns/fields named and qualified by table/entity?
+  - type: textarea
+    id: distinct
+    attributes:
+      label: Distinct-value enumeration
+      description: Is there a way to list the distinct values of one column (for warm-up scans)?
+  - type: textarea
+    id: writes
+    attributes:
+      label: Write operations
+      description: Which tools create/update/delete data (for read-only mode)?
+  - type: textarea
+    id: transport
+    attributes:
+      label: Transport & auth
+      description: "Local stdio, or remote HTTP with OAuth?"

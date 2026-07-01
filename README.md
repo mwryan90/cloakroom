@@ -1,5 +1,10 @@
 # cloakroom
 
+[![npm](https://img.shields.io/npm/v/cloakroom.svg)](https://www.npmjs.com/package/cloakroom)
+[![CI](https://github.com/mwryan90/cloakroom/actions/workflows/ci.yml/badge.svg)](https://github.com/mwryan90/cloakroom/actions/workflows/ci.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](package.json)
+
 **A masking proxy for MCP servers: sensitive customer data never reaches the AI agent's context.**
 
 cloakroom sits between an AI agent (Claude, etc.) and a data-serving MCP server. Values from columns you tag as sensitive are replaced with stable, deterministic tokens — `"Contoso Ltd"` becomes `"Client 1"`, everywhere, every session. The agent still understands structure, grouping, and joins; it just never sees the real names. When the agent filters by `"Client 1"`, the proxy translates it back to the real value on the way in, so analysis works end to end.
