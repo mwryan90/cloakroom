@@ -1,0 +1,50 @@
+name: Bug report
+description: Something isn't working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! **Do not paste real sensitive data** — Cloakroom's
+        whole job is to keep that out of places like this. Use fictional values
+        (e.g. Contoso Ltd) when illustrating. Suspected security issue? See
+        [SECURITY.md](../../blob/main/SECURITY.md) instead.
+  - type: input
+    id: version
+    attributes:
+      label: Cloakroom version
+      placeholder: "e.g. 0.3.7 (npm view cloakroom version)"
+    validations:
+      required: true
+  - type: dropdown
+    id: adapter
+    attributes:
+      label: Adapter
+      options:
+        - powerbi
+        - none (generic mode)
+        - other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Config / rule used (with fictional values)
+        2. Tool call or query made
+        3. Result seen
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      placeholder: "OS, Node version, MCP client (Claude Desktop, etc.)"

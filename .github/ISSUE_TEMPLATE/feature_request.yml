@@ -1,0 +1,27 @@
+name: Feature request
+description: Suggest an improvement to Cloakroom
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do that Cloakroom makes hard today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like Cloakroom to do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: Related items on the [roadmap](../../blob/main/ROADMAP.md)?

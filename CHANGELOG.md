@@ -2,6 +2,8 @@
 
 ## 0.3.7
 
+- Repo: added SECURITY.md, ROADMAP.md, CODE_OF_CONDUCT.md, issue/PR
+  templates, and README status badges.
 - Changing a rule's prefix now offers to rename the existing sequential
   tokens too ("Client 5" → "Customer 5", numbers preserved; custom tokens
   untouched; old names still translate inbound). Previously the new prefix

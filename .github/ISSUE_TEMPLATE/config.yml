@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/mwryan90/cloakroom/security/advisories/new
+    about: Please report security issues privately, not as a public issue. See SECURITY.md.
+  - name: Roadmap
+    url: https://github.com/mwryan90/cloakroom/blob/main/ROADMAP.md
+    about: See what's planned before filing a feature or adapter request.
