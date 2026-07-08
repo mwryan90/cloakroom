@@ -191,8 +191,10 @@ function loadModels() {
       loadState();
       var nowOk = d.connection.indexOf("NOT CONNECTED") < 0;
       var prevOk = prev !== null && prev.indexOf("NOT CONNECTED") < 0;
-      if (nowOk && !prevOk && !currentGeneric) {
-        if (prev !== null) msg("Connected: " + d.connection);
+      // Reload the schema on any healthy connection change: a reconnect may
+      // have landed on a different model (e.g. the previous file was closed).
+      if (nowOk && !currentGeneric && prev !== null) {
+        if (!prevOk) msg("Connected: " + d.connection);
         loadColumns();
       }
     }
