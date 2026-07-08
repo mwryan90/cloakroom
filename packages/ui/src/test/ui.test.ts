@@ -129,6 +129,103 @@ test("re-token renames sequential tokens to a new prefix, keeps custom tokens", 
   assert.equal(rr2.renamed, 0);
 });
 
+test("multi-source: picker data, generic coverage, shared store, switching", async (t) => {
+  const tmp = mkdtempSync(join(tmpdir(), "maskmcp-ui-multi-"));
+  const cfgPath = join(tmp, "masking.yaml");
+  writeFileSync(
+    cfgPath,
+    [
+      `mappingStore: ${join(tmp, "map.jsonl")}`,
+      "columns:",
+      '  - match: "Customer[Customer Name]"',
+      "    prefix: Client",
+    ].join("\n"),
+  );
+
+  const ui = await runUi({
+    sources: [
+      {
+        name: "powerbi-modeling-mcp",
+        adapter: powerBiAdapter,
+        adapterName: "powerbi",
+        configPath: cfgPath,
+        upstreamCommand: process.execPath,
+        upstreamArgs: [fakeUpstream],
+      },
+      {
+        // Generic source: must never be spawned — a bogus command proves it.
+        name: "fabric-dw",
+        adapter: undefined,
+        adapterName: "none",
+        configPath: cfgPath,
+        upstreamCommand: "this-command-does-not-exist.exe",
+        upstreamArgs: [],
+      },
+    ],
+    port: 0,
+    log: () => {},
+  });
+  t.after(async () => {
+    await ui.close();
+  });
+  const post = (path: string, body: unknown) =>
+    fetch(ui.url + path, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-cloakroom": "1" },
+      body: JSON.stringify(body),
+    });
+
+  // Defaults to the source WITH an adapter; both are listed.
+  const src0 = (await (await fetch(ui.url + "/api/sources")).json()) as {
+    current: string;
+    sources: { name: string; generic: boolean; connected: boolean }[];
+  };
+  assert.equal(src0.current, "powerbi-modeling-mcp");
+  assert.equal(src0.sources.length, 2);
+  assert.equal(src0.sources.find((x) => x.name === "fabric-dw")?.generic, true);
+
+  // Seed a mapping through the adapter source.
+  await post("/api/mappings", {
+    match: "Customer[Customer Name]",
+    assignments: [{ value: "Contoso Ltd", token: "BigRetailer" }],
+  });
+
+  // Switch to the generic source: no spawn, sweep-only status, no discovery.
+  const sw = (await (
+    await post("/api/source", { name: "fabric-dw" })
+  ).json()) as { ok: boolean; generic: boolean; connection: string };
+  assert.ok(sw.ok);
+  assert.equal(sw.generic, true);
+  assert.match(sw.connection, /sweep-only/);
+
+  const st = (await (await fetch(ui.url + "/api/state")).json()) as {
+    source: string;
+    generic: boolean;
+    storeCount: number;
+  };
+  assert.equal(st.source, "fabric-dw");
+  assert.equal(st.generic, true);
+  assert.equal(st.storeCount, 1, "store is shared: mapping seeded via Power BI is visible here");
+
+  const colsRes = await fetch(ui.url + "/api/columns");
+  assert.equal(colsRes.status, 400, "generic sources have no schema discovery");
+
+  // The shared-store decoder still works from the generic source.
+  const lookup = (await (
+    await fetch(ui.url + "/api/lookup?q=" + encodeURIComponent("BigRetailer"))
+  ).json()) as { value: string }[];
+  assert.equal(lookup[0]?.value, "Contoso Ltd");
+
+  // Switch back: discovery works again.
+  await post("/api/source", { name: "powerbi-modeling-mcp" });
+  const cols = (await (await fetch(ui.url + "/api/columns")).json()) as { key: string }[];
+  assert.ok(cols.some((c) => c.key === "Customer[Customer Name]"));
+
+  // Unknown source is rejected.
+  const bad = await post("/api/source", { name: "nope" });
+  assert.equal(bad.status, 400);
+});
+
 test("admin UI API: discover, sample, save rule, assign mappings", async (t) => {
   const tmp = mkdtempSync(join(tmpdir(), "maskmcp-ui-"));
   const cfgPath = join(tmp, "masking.yaml");

@@ -5,8 +5,9 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadConfig, runProxy, type SourceAdapter } from "cloakroom-core";
 import { powerBiAdapter } from "cloakroom-adapter-powerbi";
-import { runUi } from "cloakroom-ui";
+import { runUi, type UiSource } from "cloakroom-ui";
 import {
+  adapterOf,
   findClaudeConfig,
   isWrapped,
   listServers,
@@ -58,7 +59,8 @@ function usage(): never {
 
   cloakroom ui     [--server <name>] [--config masking.yaml] [--port 7682] [--open]
       Open the admin page (review columns, assign tokens, exclude placeholders).
-      Finds the server via Claude Desktop's config -- no command needed.
+      Manages EVERY cloakroom-wrapped server in Claude Desktop's config --
+      switch between them in the header; --server picks the one shown first.
       Reuses an already-running instance; --open launches your browser.
 
   cloakroom init   [--config masking.yaml]
@@ -150,6 +152,23 @@ function openBrowser(url: string): void {
   } catch {
     // Banner already shows the URL; opening the browser is best-effort.
   }
+}
+
+function uiBanner(url: string): void {
+  const sep = "=".repeat(52);
+  const banner = (): void => {
+    process.stderr.write(
+      "\n" +
+        sep +
+        "\n  cloakroom admin UI is running\n  Open in your browser:  " +
+        url +
+        "\n  Press Ctrl+C here to stop it.\n" +
+        sep +
+        "\n\n",
+    );
+  };
+  banner();
+  setTimeout(banner, 1500).unref();
 }
 
 /** True if a cloakroom admin UI is already serving on this port. */
@@ -284,6 +303,42 @@ async function main(): Promise<void> {
     }
   }
 
+  // Admin UI over every cloakroom-wrapped server in one place: rules,
+  // discovery, and triage are per source; the mapping store is shared
+  // wherever their configs point at the same file. Falls back to the
+  // single-source path for explicit upstreams (`--`), unwrapped --server
+  // targets, and configs with nothing wrapped yet.
+  if (mode === "ui" && upstream.length === 0) {
+    const claudePath = findClaudeConfig(claudeConfigArg);
+    const servers = claudePath ? listServers(claudePath) : {};
+    const wrappedNames = Object.keys(servers).filter((n) => isWrapped(servers[n]));
+    const explicitUnwrapped = serverName !== undefined && !wrappedNames.includes(serverName);
+    if (wrappedNames.length > 0 && !explicitUnwrapped) {
+      const sources: UiSource[] = wrappedNames.map((n) => {
+        const entry = servers[n];
+        const up = upstreamOf(entry);
+        const adapterName = adapterOf(entry) ?? "powerbi";
+        return {
+          name: n,
+          adapter: adapters[adapterName],
+          adapterName,
+          configPath: maskingConfigOf(entry) ?? ensureMaskingConfig(configPath),
+          upstreamCommand: up.command,
+          upstreamArgs: up.args,
+        };
+      });
+      process.stderr.write(
+        `[cloakroom] managing ${sources.length} masked server(s): ` +
+          sources.map((sp) => `${sp.name} (${sp.adapter ? sp.adapterName : "sweep-only"})`).join(", ") +
+          "\n",
+      );
+      const handle = await runUi({ sources, initialSource: serverName, port });
+      uiBanner(handle.url);
+      if (open) openBrowser(handle.url);
+      return; // server keeps the process alive
+    }
+  }
+
   // No explicit upstream command? Discover it via Claude Desktop's config.
   let wrapped = true;
   if (upstream.length === 0) {
@@ -323,21 +378,7 @@ async function main(): Promise<void> {
       upstreamArgs: upstream.slice(1),
       port,
     });
-    const sep = "=".repeat(52);
-    const banner = (): void => {
-      process.stderr.write(
-        "\n" +
-          sep +
-          "\n  cloakroom admin UI is running\n" +
-          "  Open in your browser:  " +
-          handle.url +
-          "\n  Press Ctrl+C here to stop it.\n" +
-          sep +
-          "\n\n",
-      );
-    };
-    banner();
-    setTimeout(banner, 1500).unref();
+    uiBanner(handle.url);
     if (open) openBrowser(handle.url);
     return; // server keeps the process alive
   }

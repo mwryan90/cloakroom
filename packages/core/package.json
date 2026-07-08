@@ -1,6 +1,6 @@
 {
   "name": "cloakroom-core",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "Server-agnostic masking middleware core: mapping store, tokenizers, sweep, proxy pipeline",
   "license": "MIT",
   "type": "module",

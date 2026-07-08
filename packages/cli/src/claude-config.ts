@@ -88,6 +88,22 @@ export function maskingConfigOf(entry: McpServerEntry): string | undefined {
 }
 
 /**
+ * The adapter name a wrapped entry was set up with (the value after its
+ * `--adapter` flag, before the `--` separator). Returns undefined if the
+ * entry is not wrapped or records no adapter (historic wraps imply powerbi).
+ */
+export function adapterOf(entry: McpServerEntry): string | undefined {
+  if (!isWrapped(entry)) return undefined;
+  const args = entry.args ?? [];
+  const sep = args.indexOf("--");
+  const a = args.indexOf("--adapter");
+  if (a >= 0 && a + 1 < args.length && (sep < 0 || a < sep)) {
+    return args[a + 1];
+  }
+  return undefined;
+}
+
+/**
  * Rewrite a server entry so the client spawns cloakroom, which spawns the
  * original server. A `.bak` copy of the config is written first.
  */
