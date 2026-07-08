@@ -81,6 +81,8 @@ interface SourceSession {
   call?: ToolCaller;
   prepareStatus: string;
   currentModel?: string;
+  /** Resolved title of the model we are connected to (filled by the poll). */
+  connectedModelTitle?: string;
   connecting: boolean;
 }
 
@@ -145,6 +147,7 @@ export async function runUi(opts: UiOptions): Promise<UiHandle> {
 
   async function connectModel(s: SourceSession, model?: string): Promise<void> {
     if (!s.spec.adapter?.prepare || !s.call) return;
+    s.connectedModelTitle = undefined; // re-resolved by the next models poll
     try {
       s.prepareStatus = (await s.spec.adapter.prepare(s.call, model)) || "ready";
       s.currentModel = model;
@@ -294,16 +297,41 @@ export async function runUi(opts: UiOptions): Promise<UiHandle> {
 
     if (req.method === "GET" && path === "/api/models") {
       const models = adapter?.listModels ? await adapter.listModels(s.call!) : [];
-      // Auto-(re)connect: the UI may have started before any Power BI file
-      // was open (or been reused by the ribbon button long after). The page
-      // polls this endpoint every 15s, so a model that appears gets picked
-      // up without a restart.
-      if (models.length > 0 && s.prepareStatus.startsWith("NOT CONNECTED") && !s.connecting) {
-        s.connecting = true;
-        try {
-          await connectModel(s, s.currentModel);
-        } finally {
-          s.connecting = false;
+      // The page polls this endpoint every 15s; use it to self-heal in both
+      // directions. Auto-connect: the UI may have started before any Power BI
+      // file was open (or been reused by the ribbon button long after).
+      // Stale-connection: the file we connected to may have been CLOSED since
+      // — reconnect to whatever is open now, or degrade to an honest
+      // NOT CONNECTED instead of silently pointing at a dead session.
+      if (adapter && !s.connecting) {
+        if (s.prepareStatus.startsWith("NOT CONNECTED")) {
+          if (models.length > 0) {
+            s.connecting = true;
+            try {
+              await connectModel(s, s.currentModel);
+            } finally {
+              s.connecting = false;
+            }
+          }
+        } else if (adapter.prepare) {
+          const stale = s.connectedModelTitle
+            ? !models.includes(s.connectedModelTitle)
+            : models.length === 0;
+          if (stale) {
+            s.connecting = true;
+            try {
+              log(
+                `[cloakroom ui] ${s.spec.name}: connected model` +
+                  (s.connectedModelTitle ? ` "${s.connectedModelTitle}"` : "") +
+                  ` is no longer open — reconnecting`,
+              );
+              await connectModel(s, s.currentModel);
+            } finally {
+              s.connecting = false;
+            }
+          } else if (!s.connectedModelTitle && models.length > 0) {
+            s.connectedModelTitle = resolveModelTitle(models, s.currentModel);
+          }
         }
       }
       sendJson(res, 200, { models, current: s.currentModel ?? models[0] ?? null, connection: s.prepareStatus });
@@ -581,6 +609,12 @@ export async function runUi(opts: UiOptions): Promise<UiHandle> {
       }
     },
   };
+}
+
+/** Which open model a connect resolved to (mirrors the adapter's matching). */
+function resolveModelTitle(models: string[], hint?: string): string | undefined {
+  if (!hint) return models[0];
+  return models.find((m) => m.toLowerCase().includes(hint.toLowerCase())) ?? models[0];
 }
 
 function escapeRegex(s: string): string {

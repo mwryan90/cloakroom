@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -127,6 +127,59 @@ test("re-token renames sequential tokens to a new prefix, keeps custom tokens", 
     await post("/api/retoken", { match: "Customer[Customer Name]", fromPrefix: "Client" })
   ).json()) as { renamed: number };
   assert.equal(rr2.renamed, 0);
+});
+
+test("UI detects when the connected model is closed and reconnects", async (t) => {
+  const tmp = mkdtempSync(join(tmpdir(), "maskmcp-ui-stale-"));
+  const cfgPath = join(tmp, "masking.yaml");
+  writeFileSync(
+    cfgPath,
+    [
+      `mappingStore: ${join(tmp, "map.jsonl")}`,
+      "columns:",
+      '  - match: "Customer[Customer Name]"',
+      "    prefix: Client",
+    ].join("\n"),
+  );
+
+  // Power BI "open" from the start; the flag file's presence controls it.
+  const flag = join(tmp, "pbi-open.flag");
+  writeFileSync(flag, "");
+  process.env.FAKE_EMPTY_UNTIL_FILE = flag;
+  let ui;
+  try {
+    ui = await runUi({
+      configPath: cfgPath,
+      adapter: powerBiAdapter,
+      upstreamCommand: process.execPath,
+      upstreamArgs: [fakeUpstream],
+      port: 0,
+      log: () => {},
+    });
+  } finally {
+    delete process.env.FAKE_EMPTY_UNTIL_FILE; // child captured it at spawn
+  }
+  t.after(async () => {
+    await ui.close();
+  });
+  const poll = async () =>
+    (await (await fetch(ui.url + "/api/models")).json()) as { models: string[]; connection: string };
+
+  // Connected at startup; the first poll resolves which model we're on.
+  const p0 = await poll();
+  assert.match(p0.connection, /connected to Fake Model/);
+
+  // "Close" Power BI: the next poll must notice the connected model is gone
+  // and degrade to NOT CONNECTED instead of staying silently stale.
+  rmSync(flag);
+  const p1 = await poll();
+  assert.deepEqual(p1.models, []);
+  assert.match(p1.connection, /NOT CONNECTED/, "stale connection detected when the file closes");
+
+  // "Reopen" it: the poll auto-connects again.
+  writeFileSync(flag, "");
+  const p2 = await poll();
+  assert.match(p2.connection, /connected to Fake Model/, "recovers when a file opens again");
 });
 
 test("multi-source: picker data, generic coverage, shared store, switching", async (t) => {

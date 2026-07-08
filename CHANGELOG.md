@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.9
+
+- The admin UI now detects when the Power BI file it connected to has been
+  **closed** and reconnects to whatever is open (or reports NOT CONNECTED
+  honestly if nothing is). Previously a long-lived UI stayed "connected" to
+  a dead session forever. The schema list also refreshes when a reconnect
+  lands on a different model.
+- Release preflight now checks npm auth up front (an expired login used to
+  surface as a misleading 404 after the full test run).
+
 ## 0.3.8
 
 - **Multi-source admin UI**: `cloakroom ui` now manages every
