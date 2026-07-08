@@ -161,6 +161,17 @@ test("browser: source picker switches to a generic source's coverage card", asyn
   assert.ok(right.includes("NOT protected"), "coverage card states the gap");
   assert.ok(doc.getElementById("cols")!.textContent!.includes("No column browser"), "column list replaced");
   assert.ok(doc.getElementById("state")!.textContent!.includes("fabric-dw"), "state shows new source");
+
+  // Manual warm-up through the coverage card's seed form.
+  (doc.getElementById("seed-label") as unknown as { value: string }).value = "farms";
+  (doc.getElementById("seed-prefix") as unknown as { value: string }).value = "Farm";
+  (doc.getElementById("seed-values") as unknown as { value: string }).value = "Contoso Ltd\nFabrikam Inc\n";
+  doc.getElementById("seed-apply")!.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
+  await sleep(700);
+  assert.deepEqual(pageErrors, [], "no page errors after seeding");
+  const st = (await (await fetch(ui.url + "/api/state")).json()) as { storeCount: number };
+  assert.equal(st.storeCount, 2, "seeded values registered in the store");
+  assert.ok(doc.getElementById("right")!.textContent!.includes("farms"), "seeded group listed on the card");
 });
 
 test("browser: skip/restore a column and mask all text columns in a table", async (t) => {

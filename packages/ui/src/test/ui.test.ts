@@ -182,6 +182,67 @@ test("UI detects when the connected model is closed and reconnects", async (t) =
   assert.match(p2.connection, /connected to Fake Model/, "recovers when a file opens again");
 });
 
+test("seed values: manual warm-up for generic sources", async (t) => {
+  const tmp = mkdtempSync(join(tmpdir(), "maskmcp-ui-seed-"));
+  const cfgPath = join(tmp, "masking.yaml");
+  writeFileSync(
+    cfgPath,
+    [
+      `mappingStore: ${join(tmp, "map.jsonl")}`,
+      "columns:",
+      '  - match: "Customer[Customer Name]"',
+      "    prefix: Client",
+    ].join("\n"),
+  );
+  // Generic source: no adapter, upstream must never be spawned.
+  const ui = await runUi({
+    configPath: cfgPath,
+    upstreamCommand: "never-spawned.exe",
+    upstreamArgs: [],
+    port: 0,
+    log: () => {},
+  });
+  t.after(async () => {
+    await ui.close();
+  });
+  const post = (path: string, body: unknown) =>
+    fetch(ui.url + path, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-cloakroom": "1" },
+      body: JSON.stringify(body),
+    });
+
+  // Trims, dedupes, drops empties; writes the seed rule; registers values.
+  const r1 = (await (
+    await post("/api/seed", {
+      label: "customers",
+      prefix: "Farm",
+      values: ["Contoso Ltd", "Fabrikam Inc", " Contoso Ltd ", ""],
+    })
+  ).json()) as { added: number; existing: number; storeCount: number; match: string };
+  assert.equal(r1.added, 2);
+  assert.equal(r1.existing, 0);
+  assert.equal(r1.match, "seed:customers");
+  assert.ok(readFileSync(cfgPath, "utf8").includes("seed:customers"), "seed rule persisted to yaml");
+
+  // Idempotent: existing values keep their tokens.
+  const r2 = (await (
+    await post("/api/seed", { label: "customers", prefix: "Farm", values: ["Contoso Ltd", "Fabrikam Inc"] })
+  ).json()) as { added: number; existing: number };
+  assert.equal(r2.added, 0);
+  assert.equal(r2.existing, 2);
+
+  const byToken = (await (
+    await fetch(ui.url + "/api/lookup?q=" + encodeURIComponent("Farm 1"))
+  ).json()) as { value: string }[];
+  assert.equal(byToken[0]?.value, "Contoso Ltd", "seeded value got a sequential token");
+
+  // Validation.
+  assert.equal((await post("/api/seed", { label: "x", prefix: "", values: ["a"] })).status, 400);
+  assert.equal((await post("/api/seed", { label: "bad label!", prefix: "P", values: ["a"] })).status, 400);
+  assert.equal((await post("/api/seed", { label: "x", prefix: "P", values: ["  ", ""] })).status, 400);
+});
+
 test("multi-source: picker data, generic coverage, shared store, switching", async (t) => {
   const tmp = mkdtempSync(join(tmpdir(), "maskmcp-ui-multi-"));
   const cfgPath = join(tmp, "masking.yaml");

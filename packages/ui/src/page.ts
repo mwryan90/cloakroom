@@ -17,8 +17,9 @@ export const PAGE_HTML = `<!doctype html>
   main { display:flex; height:calc(100vh - 57px); }
   #left { width:380px; border-right:1px solid var(--line); overflow-y:auto; padding:12px; }
   #right { flex:1; overflow-y:auto; padding:20px; }
-  input, select, button { background:var(--panel); color:var(--text); border:1px solid var(--line);
+  input, select, button, textarea { background:var(--panel); color:var(--text); border:1px solid var(--line);
           border-radius:6px; padding:6px 9px; font:inherit; }
+  textarea { font-family:ui-monospace, monospace; width:100%; max-width:520px; resize:vertical; }
   button { cursor:pointer; } button:hover { border-color:var(--accent); }
   button.primary { background:var(--accent); color:#0b0d10; border-color:var(--accent); font-weight:600; }
   button:disabled { opacity:.45; cursor:not-allowed; }
@@ -176,7 +177,50 @@ function renderCoverage(s) {
     '<li>Values the store has never seen — this source has no column rules and no warm-up scan, so new sensitive values pass through until they are learned via a source with discovery.</li>' +
     '</ul>' +
     '<div class="hint" style="margin-top:14px">To close the gap: tag columns in a source with schema discovery (they share the store), ' +
-    'restrict what this MCP server exposes (server-side allowlists), or add a dedicated adapter for it — see the project roadmap.</div>';
+    'restrict what this MCP server exposes (server-side allowlists), or add a dedicated adapter for it — see the project roadmap.</div>' +
+    '<h3 style="margin:20px 0 4px">Seed values (manual warm-up)</h3>' +
+    '<div class="hint">Enumerate sensitive values yourself on a trusted channel — e.g. run ' +
+    'SELECT DISTINCT in the database portal — and paste them below, one per line. They register into the ' +
+    'shared store and are masked everywhere immediately. Never ask the agent to read values in order to ' +
+    'register them: that first read is exactly the exposure warm-up prevents.</div>' +
+    '<div class="row">' +
+      '<label>group <input type="text" id="seed-label" size="14" placeholder="customers" ' +
+        'title="Names this batch (letters, digits, . _ -). Re-seeding the same group adds to it."></label>' +
+      '<label>prefix <input type="text" id="seed-prefix" size="10" placeholder="Client"></label>' +
+    '</div>' +
+    '<textarea id="seed-values" rows="8" placeholder="one value per line"></textarea>' +
+    '<div class="row"><button class="primary" id="seed-apply">Register values</button>' +
+    '<span class="hint">Existing values keep their tokens; only new ones get numbered.</span></div>' +
+    seedGroupsHtml(s);
+  el("seed-apply").onclick = function(){ seedValues(s); };
+}
+
+function seedGroupsHtml(s) {
+  var seeds = (s.rules || []).filter(function(r){ return r.match.indexOf("seed:") === 0; });
+  if (seeds.length === 0) return "";
+  var h = '<h3 style="margin:16px 0 4px">Seeded groups</h3><ul style="margin:4px 0">';
+  seeds.forEach(function(r){
+    h += '<li>' + esc(r.match.slice(5)) + ' <span class="hint">(prefix "' + esc(r.prefix) + '")</span></li>';
+  });
+  return h + '</ul>';
+}
+
+function seedValues(s) {
+  var label = el("seed-label").value.trim();
+  var prefix = el("seed-prefix").value.trim();
+  var values = el("seed-values").value.split(/\\r?\\n/).map(function(v){ return v.trim(); }).filter(Boolean);
+  if (!label || !prefix || values.length === 0) {
+    msg("Group, prefix, and at least one value are required");
+    return;
+  }
+  api("/api/seed", { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ label: label, prefix: prefix, values: values }) })
+  .then(function(r){
+    msg("Registered " + r.added + " new value(s)" +
+        (r.existing ? " (" + r.existing + " already known)" : "") + " — " + r.storeCount + " total");
+    return loadState().then(function(st){ if (st && st.generic) renderCoverage(st); });
+  })
+  .catch(function(e){ msg("Error: " + e.message); });
 }
 
 /* ---------- header: model switcher (only with 2+ models) ---------- */
