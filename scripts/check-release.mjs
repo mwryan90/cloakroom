@@ -27,6 +27,14 @@ if (published) {
   process.exit(1);
 }
 
+// Expired npm sessions surface as a confusing 404 on publish — catch it here.
+try {
+  execSync("npm whoami", { stdio: ["ignore", "pipe", "ignore"] });
+} catch {
+  console.error("Not logged in to npm (or the session expired) — run: npm login");
+  process.exit(1);
+}
+
 const dirty = execSync("git status --porcelain").toString().trim();
 if (dirty) {
   console.error("Working tree is not clean — commit or stash before releasing.");
