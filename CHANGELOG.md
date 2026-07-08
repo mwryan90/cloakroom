@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.8
+
+- **Multi-source admin UI**: `cloakroom ui` now manages every
+  cloakroom-wrapped MCP server in one place. A header picker switches
+  between sources; rules, discovery, and triage are scoped per source while
+  the mapping store stays shared (same entity → same token everywhere).
+  Generic-mode sources (`--adapter none`) show a sweep-only coverage
+  summary — what is masked there and what isn't protected — instead of a
+  column browser, and their upstream is never spawned by the UI.
+- `--server` on `ui` now picks the initially selected source instead of
+  limiting the UI to one server.
+
 ## 0.3.7
 
 - Repo: added SECURITY.md, ROADMAP.md, CODE_OF_CONDUCT.md, issue/PR

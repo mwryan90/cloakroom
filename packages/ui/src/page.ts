@@ -61,6 +61,7 @@ export const PAGE_HTML = `<!doctype html>
 <header>
   <img src="__CLOAKROOM_ICON__" alt="" style="width:24px;height:24px">
   <h1>Cloakroom</h1>
+  <span id="source-slot"></span>
   <span id="model-slot"></span>
   <button id="view-toggle" title="Browse every token / real value mapping">Mappings</button>
   <span class="meta" id="state"></span>
@@ -88,7 +89,7 @@ window.onerror = function(message, source, line){
 };
 console.log("[cloakroom ui] v" + UI_VERSION + " loaded");
 
-var columns = [], current = null, filterText = "", mappingsView = false;
+var columns = [], current = null, filterText = "", mappingsView = false, currentGeneric = false;
 
 function el(id) { return document.getElementById(id); }
 function esc(s) { var d = document.createElement("div"); d.textContent = String(s); return d.innerHTML; }
@@ -105,12 +106,77 @@ function api(path, opts) {
 
 /* ---------- header: state line ---------- */
 function loadState() {
-  api("/api/state").then(function(s){
-    el("state").textContent = "v" + UI_VERSION + " · " + s.adapter +
+  return api("/api/state").then(function(s){
+    currentGeneric = !!s.generic;
+    el("state").textContent = "v" + UI_VERSION + " · " + s.source + " · " + s.adapter +
       (s.connection ? " · " + s.connection : "") +
       " · " + s.tokenMode + " tokens · " + s.storeCount + " mappings · " +
       s.rules.length + " rules · config: " + s.configPath;
+    return s;
   }).catch(function(){ /* state line is cosmetic */ });
+}
+
+/* ---------- header: source picker (only with 2+ masked servers) ---------- */
+function loadSources() {
+  api("/api/sources").then(function(d){
+    var slot = el("source-slot");
+    slot.innerHTML = "";
+    if (!d.sources || d.sources.length < 2) return;
+    var sel = document.createElement("select");
+    sel.id = "source-picker";
+    sel.title = "Masked MCP servers. Tokens are shared; rules and discovery are per source.";
+    d.sources.forEach(function(src){
+      var o = document.createElement("option");
+      o.value = src.name;
+      o.textContent = src.name + " · " + (src.generic ? "sweep-only" : src.adapter);
+      if (src.name === d.current) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.onchange = function(){ switchSource(sel.value); };
+    slot.appendChild(sel);
+  }).catch(function(){ /* picker is progressive enhancement */ });
+}
+
+function switchSource(name) {
+  el("right").innerHTML = '<div class="hint">Switching to ' + esc(name) + '…</div>';
+  el("cols").innerHTML = '<div class="hint">Loading…</div>';
+  api("/api/source", { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: name }) })
+  .then(function(){
+    current = null; columns = []; lastModelsJson = ""; lastConnection = null;
+    if (mappingsView) { mappingsView = false; el("view-toggle").textContent = "Mappings"; }
+    return loadState().then(function(s){
+      loadModels();
+      loadSources();
+      if (s && s.generic) renderCoverage(s);
+      else {
+        el("right").innerHTML = '<div class="hint">Select a column to review samples and configure masking.</div>';
+        loadColumns();
+      }
+    });
+  })
+  .catch(function(e){ msg("Error: " + e.message); loadSources(); });
+}
+
+/* ---------- generic sources: sweep-only coverage summary ---------- */
+function renderCoverage(s) {
+  el("cols").innerHTML = '<div class="hint">No column browser for this source — ' +
+    'generic mode has no schema discovery.</div>';
+  el("right").innerHTML =
+    '<h2 style="margin:0 0 2px">' + esc(s.source) + ' — sweep-only coverage</h2>' +
+    '<div class="hint">This source has no adapter. Cloakroom protects it with the global sweep.</div>' +
+    '<h3 style="margin:16px 0 4px">What IS masked here</h3>' +
+    '<ul style="margin:4px 0">' +
+    '<li>Every value already in the mapping store (<b>' + s.storeCount + '</b> values, learned from any source) — in all results, metadata, and error messages.</li>' +
+    '<li>Tokens are consistent across sources: the same entity keeps the same token everywhere.</li>' +
+    '<li>Inbound too: tokens in the agent\\u2019s queries are translated back to real values.</li>' +
+    '</ul>' +
+    '<h3 style="margin:16px 0 4px">What is NOT protected here</h3>' +
+    '<ul style="margin:4px 0">' +
+    '<li>Values the store has never seen — this source has no column rules and no warm-up scan, so new sensitive values pass through until they are learned via a source with discovery.</li>' +
+    '</ul>' +
+    '<div class="hint" style="margin-top:14px">To close the gap: tag columns in a source with schema discovery (they share the store), ' +
+    'restrict what this MCP server exposes (server-side allowlists), or add a dedicated adapter for it — see the project roadmap.</div>';
 }
 
 /* ---------- header: model switcher (only with 2+ models) ---------- */
@@ -125,7 +191,7 @@ function loadModels() {
       loadState();
       var nowOk = d.connection.indexOf("NOT CONNECTED") < 0;
       var prevOk = prev !== null && prev.indexOf("NOT CONNECTED") < 0;
-      if (nowOk && !prevOk) {
+      if (nowOk && !prevOk && !currentGeneric) {
         if (prev !== null) msg("Connected: " + d.connection);
         loadColumns();
       }
@@ -448,9 +514,12 @@ el("view-toggle").onclick = function(){
 
 el("search").oninput = function(){ filterText = el("search").value; renderColumns(); };
 
-loadState();
+loadSources();
+loadState().then(function(s){
+  if (s && s.generic) renderCoverage(s);
+  else loadColumns();
+});
 loadModels();
-loadColumns();
 setInterval(loadModels, 15000); // pick up newly opened Power BI files
 </script>
 </body>

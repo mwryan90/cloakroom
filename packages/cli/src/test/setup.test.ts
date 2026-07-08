@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
+  adapterOf,
   isWrapped,
   listServers,
   maskingConfigOf,
@@ -82,4 +83,13 @@ test("maskingConfigOf recovers the --config path from a wrapped entry", () => {
   // unwrapped entries have no recorded masking config
   unwrapServer(p, "powerbi");
   assert.equal(maskingConfigOf(listServers(p)["powerbi"]), undefined);
+});
+
+test("adapterOf recovers the --adapter name from a wrapped entry", () => {
+  const p = makeConfig();
+  wrapServer(p, "powerbi", "C:\\masking\\masking.yaml", "none");
+  const entry = listServers(p)["powerbi"];
+  assert.equal(adapterOf(entry), "none");
+  unwrapServer(p, "powerbi");
+  assert.equal(adapterOf(listServers(p)["powerbi"]), undefined, "unwrapped entries record no adapter");
 });

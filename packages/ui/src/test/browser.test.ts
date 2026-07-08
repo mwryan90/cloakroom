@@ -89,6 +89,80 @@ test("browser: page loads clean, columns clickable, mappings view works", async 
   assert.ok(doc.getElementById("map-table")!.innerHTML.includes("No mappings match"), "filter works");
 });
 
+test("browser: source picker switches to a generic source's coverage card", async (t) => {
+  const tmp = mkdtempSync(join(tmpdir(), "maskmcp-browser3-"));
+  const cfgPath = join(tmp, "masking.yaml");
+  writeFileSync(
+    cfgPath,
+    [`mappingStore: ${join(tmp, "map.jsonl")}`, "columns:", '  - match: "Customer[Customer Name]"', "    prefix: Client"].join("\n"),
+  );
+  const ui = await runUi({
+    sources: [
+      {
+        name: "powerbi-modeling-mcp",
+        adapter: powerBiAdapter,
+        adapterName: "powerbi",
+        configPath: cfgPath,
+        upstreamCommand: process.execPath,
+        upstreamArgs: [fakeUpstream],
+      },
+      {
+        name: "fabric-dw",
+        adapter: undefined,
+        adapterName: "none",
+        configPath: cfgPath,
+        upstreamCommand: "never-spawned.exe",
+        upstreamArgs: [],
+      },
+    ],
+    port: 0,
+    log: () => {},
+  });
+  t.after(async () => {
+    await ui.close();
+  });
+
+  const html = await (await fetch(ui.url + "/")).text();
+  const pageErrors: string[] = [];
+  const vc = new VirtualConsole();
+  vc.on("jsdomError", (e) => pageErrors.push(String(e)));
+  const dom = new JSDOM(html, {
+    url: ui.url + "/",
+    runScripts: "dangerously",
+    virtualConsole: vc,
+    beforeParse(window) {
+      (window as unknown as { fetch: typeof fetch }).fetch = ((path: string, opts?: RequestInit) =>
+        fetch(new URL(path, ui.url).href, opts)) as typeof fetch;
+    },
+  });
+  const win = dom.window;
+  win.addEventListener("error", (e) => pageErrors.push(`runtime: ${e.message} @${e.lineno}`));
+  await sleep(700);
+  const doc = win.document;
+
+  // Picker rendered with both sources; adapter source selected + columns shown.
+  const picker = doc.getElementById("source-picker") as unknown as {
+    value: string;
+    options: { length: number };
+    dispatchEvent(e: Event): boolean;
+  };
+  assert.ok(picker, "source picker rendered with 2+ sources");
+  assert.equal(picker.options.length, 2);
+  assert.ok(doc.querySelectorAll(".col").length >= 3, "columns rendered for adapter source");
+  assert.ok(doc.getElementById("state")!.textContent!.includes("powerbi-modeling-mcp"), "state shows source");
+
+  // Switch to the generic source → coverage card, no column browser.
+  picker.value = "fabric-dw";
+  picker.dispatchEvent(new win.Event("change", { bubbles: true }));
+  await sleep(700);
+  assert.deepEqual(pageErrors, [], "no page errors after source switch");
+  const right = doc.getElementById("right")!.textContent!;
+  assert.ok(right.includes("sweep-only coverage"), "coverage card shown");
+  assert.ok(right.includes("NOT protected"), "coverage card states the gap");
+  assert.ok(doc.getElementById("cols")!.textContent!.includes("No column browser"), "column list replaced");
+  assert.ok(doc.getElementById("state")!.textContent!.includes("fabric-dw"), "state shows new source");
+});
+
 test("browser: skip/restore a column and mask all text columns in a table", async (t) => {
   const tmp = mkdtempSync(join(tmpdir(), "maskmcp-browser2-"));
   const cfgPath = join(tmp, "masking.yaml");
