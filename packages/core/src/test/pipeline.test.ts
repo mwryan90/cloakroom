@@ -209,6 +209,30 @@ test("stale tokens still unmask and report their rename", () => {
   assert.ok(pipeline.maskText("for Contoso Ltd").includes("Customer 1"));
 });
 
+test("seed groups: bracket-less rules mask, fail closed, and skip warm-up", () => {
+  // The UI's manual warm-up registers values under `seed:<label>` rules.
+  const cfg = ConfigSchema.parse({
+    columns: [{ match: "seed:customers", prefix: "Client" }],
+  });
+  const store = new MappingStore(join(mkdtempSync(join(tmpdir(), "maskmcp-")), "map.jsonl"), {
+    mode: "sequential",
+  });
+  const pipeline = new MaskingPipeline(cfg, store, undefined);
+  store.getOrCreateToken("seed:customers", "Client", "token", "Contoso Ltd");
+
+  assert.ok(pipeline.maskText("report for Contoso Ltd").includes("Client 1"), "sweep masks seeded values");
+  assert.ok(
+    JSON.stringify(pipeline.unmaskArgs({ q: 'name = "Client 1"' })).includes("Contoso Ltd"),
+    "seeded tokens unmask inbound",
+  );
+  assert.throws(
+    () => pipeline.unmaskArgs({ q: 'name = "Client 99"' }),
+    UnknownTokenError,
+    "seed prefixes are known token shapes — unknown tokens still fail closed",
+  );
+  assert.equal(pipeline.warmupRules().length, 0, "seed rules are never warm-up scanned");
+});
+
 test("short values are masked with word boundaries, not substring-replaced", () => {
   const { pipeline } = makePipeline();
   pipeline.maskResult("query", { rows: [{ "Customer[Customer Name]": "AB" }] }); // Client 1

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.10
+
+- **Seed values (manual warm-up)**: generic sources' coverage card gains a
+  form to paste values enumerated on a trusted channel (one per line). They
+  register into the shared store under a `seed:<label>` group — masked
+  everywhere immediately, tokens numbered sequentially, idempotent
+  re-seeding, and the group's prefix becomes a known token shape so unknown
+  tokens still fail closed. Closes the warm-up gap for sources without an
+  adapter (e.g. a Fabric warehouse wrapped with `--adapter none`).
+
 ## 0.3.9
 
 - The admin UI now detects when the Power BI file it connected to has been

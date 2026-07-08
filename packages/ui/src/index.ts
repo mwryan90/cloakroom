@@ -541,6 +541,68 @@ export async function runUi(opts: UiOptions): Promise<UiHandle> {
       return;
     }
 
+    if (req.method === "POST" && path === "/api/seed") {
+      // Manual warm-up for sources without an adapter: the human enumerates
+      // sensitive values on a trusted channel (never via an agent — that IS
+      // the exposure warm-up prevents) and registers them here. The group is
+      // recorded as a `seed:<label>` rule so the prefix becomes a known token
+      // shape (fail-closed inbound checks, masking_info) — its bracket-less
+      // match never collides with real columns and is skipped by warm-up.
+      const body = (await readBody(req)) as {
+        label?: string;
+        prefix?: string;
+        mask?: "token" | "email";
+        values?: string[];
+      };
+      const label = (body.label ?? "").trim();
+      const prefix = (body.prefix ?? "").trim();
+      if (!label || !/^[\w.-]+$/.test(label)) {
+        sendJson(res, 400, { error: "label is required (letters, digits, . _ - only)" });
+        return;
+      }
+      if (!prefix) {
+        sendJson(res, 400, { error: "prefix is required" });
+        return;
+      }
+      const values = [...new Set((body.values ?? []).map((v) => String(v).trim()).filter(Boolean))];
+      if (values.length === 0) {
+        sendJson(res, 400, { error: "values must contain at least one non-empty value" });
+        return;
+      }
+      const mask = body.mask === "email" ? "email" : "token";
+      const match = `seed:${label}`;
+
+      // Upsert the seed rule so the group is visible and its prefix is a
+      // recognized token shape.
+      const raw = (parseYaml(readFileSync(s.spec.configPath, "utf8")) ?? {}) as Record<string, unknown>;
+      const list = Array.isArray(raw.columns) ? (raw.columns as ColumnRule[]) : [];
+      const idx = list.findIndex((r) => r.match === match);
+      const rule: ColumnRule = { match, mask, prefix, exclude: idx >= 0 ? (list[idx].exclude ?? []) : [] };
+      if (idx >= 0) list[idx] = rule;
+      else list.push(rule);
+      raw.columns = list;
+      writeFileSync(s.spec.configPath, stringifyYaml(raw));
+      s.cfgMtime = safeMtime(s.spec.configPath);
+      s.cfg = { ...s.cfg, ...ConfigSchema.partial().parse(raw), mappingStore: s.cfg.mappingStore };
+      s.matcher = new RuleMatcher(s.cfg.columns);
+
+      const compiled = s.matcher.byMatchString(match)!;
+      const excludedLower = new Set((compiled.rule.exclude ?? []).map((v) => v.toLowerCase()));
+      let added = 0;
+      let existing = 0;
+      for (const v of values) {
+        if (excludedLower.has(v.toLowerCase())) continue;
+        if (s.store.lookupByValue(compiled.groupId, v)) existing++;
+        else {
+          s.store.getOrCreateToken(compiled.groupId, prefix, mask, v);
+          added++;
+        }
+      }
+      log(`[cloakroom ui] seeded ${match}: ${added} new, ${existing} already known (${s.spec.name})`);
+      sendJson(res, 200, { ok: true, match, added, existing, storeCount: s.store.count() });
+      return;
+    }
+
     if (req.method === "GET" && path === "/api/mappings-list") {
       // Full mapping table for the human owner: token, real value, column group.
       const limit = Math.min(Number(url.searchParams.get("limit") ?? 5000), 20000);
